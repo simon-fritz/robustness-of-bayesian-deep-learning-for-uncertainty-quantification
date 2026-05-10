@@ -11,10 +11,12 @@ requires-python = ">=3.10"
 authors = [{ name = "Simon Fritz" }]
 dependencies = [
     "torch",
+    "torchvision",
     "medmnist",
     "laplace-torch",
     "hydra-core",
     "numpy",
+    "pandas",
     "matplotlib",
     "scikit-learn",
     "tqdm",
