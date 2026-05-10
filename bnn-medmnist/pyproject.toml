@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bnn-medmnist"
+version = "0.1.0"
+description = "OOD detection with Bayesian Neural Networks on MedMNIST."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Simon Fritz" }]
+dependencies = [
+    "torch",
+    "medmnist",
+    "laplace-torch",
+    "hydra-core",
+    "numpy",
+    "matplotlib",
+    "scikit-learn",
+    "tqdm",
+    "tensorboard",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

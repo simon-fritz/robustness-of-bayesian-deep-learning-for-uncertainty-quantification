@@ -1,0 +1,8 @@
+# Small CNN baseline for 28x28 MedMNIST inputs.
+name: small_cnn
+in_channels: 1
+num_classes: 2
+# Layer names referenced by methods.bayesian_layers (see methods/base.py).
+feature_layers: [layer1, layer2, layer3, layer4]
+classifier_layer: fc
+dropout: 0.0
