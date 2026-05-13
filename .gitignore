@@ -29,3 +29,17 @@ env/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Project artifacts
+logs/
+checkpoints/
+/data/
+wandb/
+
+# Run outputs — ignore everything except small text artifacts worth tracking
+outputs/**
+!outputs/
+!outputs/**/
+!outputs/**/*.json
+!outputs/**/*.yaml
+!outputs/**/*.txt
