@@ -21,6 +21,8 @@ from bnn_medmnist.utils.config import load_experiment_config
 from bnn_medmnist.utils.logging import log_run_start
 from bnn_medmnist.utils.seeding import set_seed
 
+PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+
 
 def _training_block(method_cfg):
     """Return the training-config block for a given method config.
@@ -80,12 +82,12 @@ def main() -> None:
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_name = cfg.get("run_name") or cfg.get("experiment_name") or "run"
-    run_dir = Path("outputs") / run_name / timestamp
+    run_dir = PACKAGE_ROOT / "outputs" / run_name / timestamp
     run_dir.mkdir(parents=True, exist_ok=True)
     OmegaConf.save(cfg, run_dir / "config.yaml")
 
-    tb_dir = Path("logs/tensorboard") / f"{run_name}_{timestamp}"
-    ckpt_path = Path("checkpoints") / run_name / timestamp / "best.pt"
+    tb_dir = PACKAGE_ROOT / "logs" / "tensorboard" / f"{run_name}_{timestamp}"
+    ckpt_path = PACKAGE_ROOT / "checkpoints" / run_name / timestamp / "best.pt"
 
     log_run_start(
         run_dir=run_dir, config=cfg,

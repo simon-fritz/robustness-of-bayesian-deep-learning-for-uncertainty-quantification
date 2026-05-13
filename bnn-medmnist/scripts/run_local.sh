@@ -13,6 +13,9 @@ fi
 
 CONFIG="$1"
 
+# Always run from the package root so relative paths (configs, ./data, ...) resolve here.
+cd "$(dirname "$0")/.."
+
 # Default DATA_ROOT if the user has not set one.
 export DATA_ROOT="${DATA_ROOT:-$HOME/.medmnist}"
 
