@@ -1,14 +1,21 @@
 # Last-layer Laplace approximation (laplace-torch).
-# Trains a deterministic network, then fits a Gaussian posterior over the
-# final classifier layer's weights via the Laplace approximation.
+# Two phases: (1) MAP training (delegates to the deterministic trainer);
+# (2) Laplace fit on the final classifier layer's weights.
 name: last_layer_laplace
-bayesian_layers: ["fc"]    # only the classifier head is treated as Bayesian
-n_samples: 100             # MC samples drawn from the Laplace posterior at predict
-hessian_structure: kron    # kron | diag | full
-prior_precision: 1.0
-optimize_prior_precision: marglik   # null | marglik | gridsearch
-# Pre-training (MAP) hyperparameters; the Laplace fit reuses this trained net.
-optimizer: adam
-lr: 1e-3
-weight_decay: 5e-4
-epochs: 50
+bayesian_layers: ["fc"]
+
+# Phase 1: MAP training. Same fields as the deterministic method config.
+training:
+  optimizer: adam
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  epochs: 30
+  early_stopping_patience: 5
+  use_class_weights: true
+
+# Phase 2: Laplace approximation.
+laplace:
+  subset_of_weights: last_layer        # last_layer | all | subnetwork
+  hessian_structure: full              # full | kron | diag (full is fine for last layer)
+  prior_precision_method: marglik      # marglik | CV | <float>
+  n_predictive_samples: 100            # MC samples drawn at predict time

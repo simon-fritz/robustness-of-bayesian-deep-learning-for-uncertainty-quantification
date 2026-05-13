@@ -1,0 +1,13 @@
+# Experiment: Deterministic baseline on PneumoniaMNIST.
+defaults:
+  - /data: pneumoniamnist
+  - /model: small_cnn
+  - /method: deterministic
+  - _self_
+
+experiment_name: pneumonia_baseline
+run_name: pneumonia_baseline
+seed: 42
+
+output_dir: outputs
+checkpoint_dir: checkpoints

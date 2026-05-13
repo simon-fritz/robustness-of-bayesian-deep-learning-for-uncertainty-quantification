@@ -1,5 +1,4 @@
 # Experiment: Last-Layer Laplace on PneumoniaMNIST.
-# One experiment = one composed config. Override sub-configs via `defaults`.
 defaults:
   - /data: pneumoniamnist
   - /model: small_cnn
@@ -7,11 +6,11 @@ defaults:
   - _self_
 
 experiment_name: pneumonia_lll
+run_name: pneumonia_lll
 seed: 42
 
-# OOD sources to evaluate against (resolved by data/ood_pairs.py).
+# OOD sources to evaluate against (resolved by data/ood_pairs.py — next step).
 ood_datasets: [bloodmnist, pathmnist]
 
-# Output / checkpoint roots — relative paths, resolved by Hydra's runtime.
-output_dir: outputs/${experiment_name}
-checkpoint_dir: checkpoints/${experiment_name}
+output_dir: outputs
+checkpoint_dir: checkpoints

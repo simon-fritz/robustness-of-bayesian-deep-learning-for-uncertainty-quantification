@@ -3,6 +3,8 @@ name: deterministic
 bayesian_layers: []        # no stochastic layers
 n_samples: 1               # single forward pass at predict time
 optimizer: adam
-lr: 1e-3
-weight_decay: 5e-4
-epochs: 50
+lr: 1.0e-3
+weight_decay: 1.0e-4
+epochs: 30
+early_stopping_patience: 5
+use_class_weights: true
