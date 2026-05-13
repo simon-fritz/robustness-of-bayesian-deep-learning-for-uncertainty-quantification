@@ -9,7 +9,7 @@ experiment_name: pneumonia_lll
 run_name: pneumonia_lll
 seed: 42
 
-# OOD sources to evaluate against (resolved by data/ood_pairs.py — next step).
+# OOD sources to evaluate against (resolved by data/ood_pairs.py — TODO: not implemented).
 ood_datasets: [bloodmnist, pathmnist]
 
 output_dir: outputs
