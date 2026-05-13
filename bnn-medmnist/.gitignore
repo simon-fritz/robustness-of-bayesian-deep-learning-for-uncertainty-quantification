@@ -33,7 +33,7 @@ env/
 # Project artifacts
 logs/
 checkpoints/
-data/
+/data/
 wandb/
 
 # Run outputs — ignore everything except small text artifacts worth tracking

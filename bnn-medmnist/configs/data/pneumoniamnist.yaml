@@ -1,0 +1,12 @@
+# PneumoniaMNIST — binary classification (normal / pneumonia), 1x28x28.
+# Used as in-distribution dataset for the first experiment.
+name: pneumoniamnist
+flag: pneumoniamnist
+num_classes: 2
+in_channels: 1
+image_size: 28
+# Resolved against $DATA_ROOT at load time; do not hardcode absolute paths.
+root: ${oc.env:DATA_ROOT,./data}
+download: true
+batch_size: 128
+num_workers: 4
