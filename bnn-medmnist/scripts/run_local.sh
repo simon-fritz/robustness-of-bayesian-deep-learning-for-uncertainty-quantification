@@ -16,7 +16,8 @@ CONFIG="$1"
 # Always run from the package root so relative paths (configs, ./data, ...) resolve here.
 cd "$(dirname "$0")/.."
 
-# Default DATA_ROOT if the user has not set one.
-export DATA_ROOT="${DATA_ROOT:-$HOME/.medmnist}"
+# If the user has not set DATA_ROOT, fall through to the YAML default (./data,
+# anchored to the package root by the loader). Setting it here would override
+# the YAML and split downloads across two locations.
 
 python scripts/train.py --config "$CONFIG"

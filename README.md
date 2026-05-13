@@ -18,11 +18,26 @@ pip install -e .
 
 Python 3.10+ required.
 
+## Data
+
+MedMNIST datasets are downloaded automatically by the [`medmnist`](https://pypi.org/project/medmnist/)
+package on first use (the `.npz` files are fetched from Zenodo). You do not
+need to download anything manually.
+
+By default they land in `bnn-medmnist/data/`. Override the location with
+`DATA_ROOT`:
+
+```bash
+export DATA_ROOT=/some/shared/path
+```
+
+Relative paths are resolved against `bnn-medmnist/`, absolute paths and `~`
+are honored.
+
 ## Configuration
 
 - Configs are Hydra-composable YAMLs under `bnn-medmnist/configs/`.
 - One experiment = one composed config under `bnn-medmnist/configs/experiment/`.
-- Data root is read from `$DATA_ROOT` (default: `~/.medmnist`).
 
 ## Run locally
 
@@ -62,5 +77,5 @@ bnn-medmnist/        Python package (pyproject.toml lives here)
   outputs/           Run artifacts — only small text files tracked
 ```
 
-All artifacts (data, checkpoints, logs, outputs) live under `bnn-medmnist/`
-because scripts use relative paths and are run from there.
+All artifact paths are anchored to `bnn-medmnist/` inside the scripts, so
+they end up there regardless of which directory you launch from.
