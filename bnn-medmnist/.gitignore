@@ -34,5 +34,12 @@ env/
 logs/
 checkpoints/
 data/
-outputs/
 wandb/
+
+# Run outputs — ignore everything except small text artifacts worth tracking
+outputs/**
+!outputs/
+!outputs/**/
+!outputs/**/*.json
+!outputs/**/*.yaml
+!outputs/**/*.txt
