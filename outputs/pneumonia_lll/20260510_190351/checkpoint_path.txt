@@ -1,1 +1,0 @@
-checkpoints/pneumonia_lll/20260510_190351/best.pt

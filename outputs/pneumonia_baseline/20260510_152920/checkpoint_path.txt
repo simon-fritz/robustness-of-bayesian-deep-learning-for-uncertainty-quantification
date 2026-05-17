@@ -1,1 +1,0 @@
-checkpoints/pneumonia_baseline/20260510_152920/best.pt

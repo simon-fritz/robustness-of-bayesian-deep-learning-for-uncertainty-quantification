@@ -25,6 +25,7 @@ from bnn_medmnist.evaluation.metrics import (
     balanced_accuracy,
     expected_calibration_error,
 )
+from bnn_medmnist.evaluation.plots import plot_reliability_diagram
 from bnn_medmnist.evaluation.uncertainty import (
     expected_entropy,
     mutual_information,
@@ -139,8 +140,15 @@ def main() -> None:
         probs_samples=probs_samples.numpy().astype(np.float32),
         labels=y.numpy().astype(np.int64),
     )
+    fig_dir = run_dir / "figures"
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    rel_path = fig_dir / "reliability_diagram"
+    plot_reliability_diagram(
+        y.numpy(), mean_probs.numpy(), method_name=method_name, save_path=rel_path,
+    )
     print(f"\nsaved: {run_dir / 'test_metrics.json'}")
     print(f"saved: {run_dir / 'test_predictions.npz'}  (shape={tuple(probs_samples.shape)})")
+    print(f"saved: {rel_path.with_suffix('.png')}")
 
 
 if __name__ == "__main__":

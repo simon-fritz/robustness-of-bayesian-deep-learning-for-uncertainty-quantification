@@ -1,11 +1,11 @@
-timestamp: 2026-05-13T12:03:40
-git_commit: 71f0c75668f5ef6824bd89f6801cde45c3f4ad60
+timestamp: 2026-05-17T17:21:09
+git_commit: c5cec4087d7343467306c3a6878ab5e704c54186
 slurm_job_id: None
 hostname: MacBook-Pro-von-Simon.local
 cwd: /Users/simonfritz/Projekte/uni/adlm/robustness-of-bayesian-deep-learning-for-uncertainty-quantification
-run_dir: /Users/simonfritz/Projekte/uni/adlm/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/outputs/pneumonia_baseline/20260513_120340
-checkpoint: /Users/simonfritz/Projekte/uni/adlm/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/checkpoints/pneumonia_baseline/20260513_120340/best.pt
-tensorboard: /Users/simonfritz/Projekte/uni/adlm/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/logs/tensorboard/pneumonia_baseline_20260513_120340
+run_dir: /Users/simonfritz/Projekte/uni/adlm/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/outputs/pneumonia_baseline/20260517_172109
+checkpoint: /Users/simonfritz/Projekte/uni/adlm/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/checkpoints/pneumonia_baseline/20260517_172109/best.pt
+tensorboard: /Users/simonfritz/Projekte/uni/adlm/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/logs/tensorboard/pneumonia_baseline_20260517_172109
 config:
 data:
   name: pneumoniamnist
