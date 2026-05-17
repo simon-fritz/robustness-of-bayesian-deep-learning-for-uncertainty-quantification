@@ -1,0 +1,8 @@
+# Within-dataset OOD: BloodMNIST with class 7 held out of training.
+# Assumes the trained run used data.exclude_classes: [7].
+scenario: held_out_class
+id_dataset: BloodMNIST
+held_out_classes: [7]
+n_predictive_samples: 100
+batch_size: 256
+num_workers: 4

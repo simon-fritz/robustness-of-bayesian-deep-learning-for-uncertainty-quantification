@@ -3,7 +3,7 @@
 # so behavior matches across local and cluster runs.
 #
 # Usage:
-#   ./scripts/run_local.sh configs/experiment/pneumonia_lll.yaml
+#   ./scripts/run_local.sh configs/experiment/training/pneumonia_lll.yaml
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then

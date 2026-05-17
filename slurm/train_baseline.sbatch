@@ -13,5 +13,4 @@ ml python/anaconda3
 conda deactivate
 conda activate TODO-env-name
 
-# TODO: add configs/experiment/pneumonia_baseline.yaml (deterministic) and switch to it.
-python scripts/train.py --config configs/experiment/pneumonia_baseline.yaml
+python scripts/train.py --config configs/experiment/training/pneumonia_baseline.yaml

@@ -1,0 +1,8 @@
+# Near-OOD: PneumoniaMNIST (ID) vs OrganAMNIST (OOD).
+# Same grayscale medical-imaging domain, different anatomy/task.
+scenario: near_ood
+id_dataset: PneumoniaMNIST
+ood_datasets: [organamnist]
+n_predictive_samples: 100
+batch_size: 256
+num_workers: 4

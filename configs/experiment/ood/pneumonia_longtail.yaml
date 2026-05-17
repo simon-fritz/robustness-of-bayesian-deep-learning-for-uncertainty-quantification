@@ -1,0 +1,15 @@
+# Long-tail OOD evaluation for PneumoniaMNIST.
+# Assumes the trained run used data.class_subsampling: {0: 0.02}
+# (see configs/experiment/training/pneumonia_longtail_{lll,det}.yaml).
+#
+# Binary-dataset note: ID test loader contains only class 1 ("pneumonia") and
+# the "OOD" loader contains only class 0 ("normal"). This compares uncertainty
+# on the majority class vs. the under-represented class; the result also
+# reflects class difficulty, not only training imbalance. Cross-check against
+# BloodMNIST long-tail before drawing conclusions.
+scenario: long_tail
+id_dataset: PneumoniaMNIST
+tail_classes: [0]
+n_predictive_samples: 100
+batch_size: 256
+num_workers: 4

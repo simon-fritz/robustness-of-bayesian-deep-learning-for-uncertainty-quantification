@@ -33,12 +33,14 @@ are honored.
 ## Configuration
 
 - Configs are Hydra-composable YAMLs under `configs/`.
-- One experiment = one composed config under `configs/experiment/`.
+- One experiment = one composed config under `configs/experiment/`, split into
+  `configs/experiment/training/` (produce checkpoints) and
+  `configs/experiment/ood/` (post-hoc OOD evaluation scenarios).
 
 ## Run locally
 
 ```bash
-./scripts/run_local.sh configs/experiment/pneumonia_lll.yaml
+./scripts/run_local.sh configs/experiment/training/pneumonia_lll.yaml
 ```
 
 ## Run on SLURM

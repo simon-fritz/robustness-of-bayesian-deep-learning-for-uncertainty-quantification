@@ -1,0 +1,15 @@
+# BloodMNIST — 8-class peripheral blood cell classification, 3x28x28.
+# Used both standalone and as the ID dataset for the within-dataset OOD
+# scenarios (held_out_class, long_tail).
+name: bloodmnist
+flag: bloodmnist
+num_classes: 8
+in_channels: 3
+image_size: 28
+root: ${oc.env:DATA_ROOT,./data}
+download: true
+batch_size: 128
+num_workers: 4
+# Optional, default unfiltered. Examples used by within-dataset OOD scenarios:
+#   exclude_classes: [7]
+#   class_subsampling: {7: 0.02}

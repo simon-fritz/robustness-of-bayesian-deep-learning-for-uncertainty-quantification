@@ -13,4 +13,4 @@ ml python/anaconda3
 conda deactivate
 conda activate TODO-env-name
 
-python scripts/train.py --config configs/experiment/pneumonia_lll.yaml
+python scripts/train.py --config configs/experiment/training/pneumonia_lll.yaml

@@ -1,0 +1,22 @@
+# Training config: deterministic model on PneumoniaMNIST with class 0
+# ("normal") heavily subsampled — produces a long-tail counterpart to
+# the pneumonia_baseline run for the long_tail OOD scenario.
+#
+# Label lookup (medmnist.INFO["pneumoniamnist"]["label"]):
+#   0 -> "normal"   (under-represented at training time)
+#   1 -> "pneumonia"
+defaults:
+  - /data: pneumoniamnist
+  - /model: small_cnn
+  - /method: deterministic
+  - _self_
+
+experiment_name: pneumonia_longtail_normal2pct_det
+run_name: pneumonia_longtail_normal2pct_det
+seed: 42
+
+data:
+  class_subsampling: {0: 0.02}  # keep 2% of "normal"
+
+output_dir: outputs
+checkpoint_dir: checkpoints

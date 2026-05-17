@@ -1,0 +1,24 @@
+{
+  "tail_0": {
+    "predictive_entropy": {
+      "auroc": 0.748115275038352,
+      "auprc": 0.6069593079236332,
+      "fpr_at_95_tpr": 0.8512820512820513
+    },
+    "mutual_information": {
+      "auroc": 0.5,
+      "auprc": 0.375,
+      "fpr_at_95_tpr": 1.0
+    },
+    "expected_entropy": {
+      "auroc": 0.748115275038352,
+      "auprc": 0.6069593079236332,
+      "fpr_at_95_tpr": 0.8512820512820513
+    },
+    "one_minus_max_softmax": {
+      "auroc": 0.748115275038352,
+      "auprc": 0.6069593079236332,
+      "fpr_at_95_tpr": 0.8512820512820513
+    }
+  }
+}

@@ -1,0 +1,8 @@
+# Within-dataset long-tail OOD: BloodMNIST trained with class 7 heavily subsampled.
+# Assumes the trained run used data.class_subsampling: {7: 0.02}.
+scenario: long_tail
+id_dataset: BloodMNIST
+tail_classes: [7]
+n_predictive_samples: 100
+batch_size: 256
+num_workers: 4

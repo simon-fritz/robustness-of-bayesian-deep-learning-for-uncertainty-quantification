@@ -1,8 +1,8 @@
 """Training entry point.
 
 Usage:
-    python scripts/train.py --config configs/experiment/pneumonia_baseline.yaml
-    python scripts/train.py --config configs/experiment/pneumonia_lll.yaml
+    python scripts/train.py --config configs/experiment/training/pneumonia_baseline.yaml
+    python scripts/train.py --config configs/experiment/training/pneumonia_lll.yaml
 """
 
 from __future__ import annotations
