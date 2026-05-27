@@ -1,0 +1,7 @@
+scenario: long_tail
+id_dataset: PneumoniaMNIST
+tail_classes:
+- 0
+n_predictive_samples: 100
+batch_size: 256
+num_workers: 4
