@@ -62,6 +62,19 @@ SCORE_PALETTE = {
     "mutual_information": "#E63946",
     "expected_entropy": "#F4A261",
     "one_minus_max_softmax": "#2A9D8F",
+    "softmax_variance_sum": "#9B5DE5",
+    "softmax_variance_max": "#C77DFF",
+    "expected_pairwise_kl": "#F15BB5",
+    "logit_variance_sum": "#00BBF9",
+    "logit_variance_max": "#48CAE4",
+}
+
+# Colors for the four conceptual score families (category-grouped bar chart).
+CATEGORY_COLORS = {
+    "First-order (any model)": "#2A9D8F",
+    "Information-theoretic decomposition (MC samples)": "#E63946",
+    "Statistical spread (MC samples)": "#9B5DE5",
+    "Analytical Gaussian spread (Laplace only)": "#00BBF9",
 }
 
 
@@ -72,6 +85,11 @@ def _pretty(name: str) -> str:
         "mutual_information": "Mutual Information",
         "expected_entropy": "Expected Entropy",
         "one_minus_max_softmax": "1 - Max Softmax",
+        "softmax_variance_sum": "Softmax Var (sum)",
+        "softmax_variance_max": "Softmax Var (max)",
+        "expected_pairwise_kl": "Expected Pairwise KL",
+        "logit_variance_sum": "Logit Var (sum)",
+        "logit_variance_max": "Logit Var (max)",
     }
     return overrides.get(name, name.replace("_", " ").title())
 
@@ -459,10 +477,133 @@ def plot_failure_modes(
     return fig
 
 
+# ---------------------------------------------------------------------------
+# 8. AUROC bar chart grouped by conceptual score *family*
+# ---------------------------------------------------------------------------
+def plot_score_category_bar_chart(
+    auroc_by_score: dict[str, float],
+    categories: dict[str, list[str]],
+    save_path: Path,
+    title: str | None = None,
+):
+    """AUROC bars grouped by conceptual score family.
+
+    ``auroc_by_score`` maps score name -> AUROC (scores absent / N/A are simply
+    skipped). ``categories`` maps category label -> ordered list of score names
+    (e.g. :data:`evaluation.ood.SCORE_CATEGORIES`). Bars are clustered by
+    category and colored per score, making it visually clear which *family* of
+    measures is useful for OOD detection.
+    """
+    # Short labels for the (long) category names, used above each group.
+    short = {
+        "First-order (any model)": "First-order",
+        "Information-theoretic decomposition (MC samples)": "Information-theoretic",
+        "Statistical spread (MC samples)": "Statistical spread",
+        "Analytical Gaussian spread (Laplace only)": "Analytical Gaussian",
+    }
+
+    # Build the flat plotting order, keeping only scores we actually have.
+    positions, heights, bar_colors = [], [], []
+    group_spans, group_labels = [], []
+    tick_positions, tick_labels = [], []
+    x = 0.0
+    gap = 1.0  # gap between categories
+    for cat, names in categories.items():
+        present = [n for n in names if n in auroc_by_score and auroc_by_score[n] is not None]
+        if not present:
+            continue
+        start = x
+        for n in present:
+            positions.append(x)
+            heights.append(float(auroc_by_score[n]))
+            bar_colors.append(SCORE_PALETTE.get(n, "#888888"))
+            tick_positions.append(x)
+            tick_labels.append(_pretty(n))
+            x += 1.0
+        group_spans.append((start, x - 1.0))
+        group_labels.append(short.get(cat, cat.split(" (")[0]))
+        x += gap
+
+    fig, ax = plt.subplots(figsize=(max(6.0, 0.85 * len(positions) + 2.0), 5.0))
+    ax.bar(positions, heights, width=0.9, color=bar_colors, edgecolor="white")
+    ax.axhline(0.5, color="k", linestyle="--", linewidth=0.8, alpha=0.5)
+    ax.set_ylim(0.4, 1.05)
+    ax.set_yticks(np.arange(0.4, 1.01, 0.1))
+    ax.set_ylabel("AUROC")
+    ax.set_xticks(tick_positions)
+    ax.set_xticklabels(tick_labels, rotation=30, ha="right", fontsize=8)
+
+    # Category bands: a bracket + label above each group, below the title.
+    for (lo, hi), label in zip(group_spans, group_labels):
+        center = (lo + hi) / 2.0
+        ax.plot([lo - 0.45, hi + 0.45], [1.005, 1.005], transform=ax.get_xaxis_transform(),
+                color="0.4", linewidth=1.0, clip_on=False)
+        ax.text(center, 1.02, label, transform=ax.get_xaxis_transform(),
+                ha="center", va="bottom", fontsize=8.5, fontweight="bold", clip_on=False)
+    ax.annotate(
+        "random (0.5)", xy=(positions[-1], 0.5), xytext=(4, 3),
+        textcoords="offset points", fontsize=8, color="k", va="bottom",
+    )
+    ax.set_title(title or "OOD-detection AUROC by score family", pad=22)
+    fig.tight_layout()
+    _save(fig, save_path)
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# 9. MI vs logit-variance scatter (Hüllermeier: do they carry the same info?)
+# ---------------------------------------------------------------------------
+def plot_score_correlation_scatter(
+    x_scores: np.ndarray,
+    y_scores: np.ndarray,
+    is_ood: np.ndarray,
+    save_path: Path,
+    x_label: str,
+    y_label: str,
+    title: str | None = None,
+):
+    """Per-sample scatter of two uncertainty scores, colored by ID/OOD.
+
+    Annotates the Pearson correlation. If the two scores are highly correlated
+    they carry the same information; if not, they pick up different aspects of
+    the posterior — the direct visualization of Hüllermeier's point that the
+    choice of second-order summary statistic matters.
+    """
+    x_scores = np.asarray(x_scores).ravel()
+    y_scores = np.asarray(y_scores).ravel()
+    is_ood = np.asarray(is_ood).ravel().astype(bool)
+
+    finite = np.isfinite(x_scores) & np.isfinite(y_scores)
+    if finite.sum() >= 2 and np.std(x_scores[finite]) > 0 and np.std(y_scores[finite]) > 0:
+        pearson = float(np.corrcoef(x_scores[finite], y_scores[finite])[0, 1])
+    else:
+        pearson = float("nan")
+
+    fig, ax = plt.subplots(figsize=(5.0, 5.0))
+    for mask, label, color in [
+        (~is_ood, "ID", COLORS["id"]),
+        (is_ood, "OOD", COLORS["ood"]),
+    ]:
+        ax.scatter(x_scores[mask], y_scores[mask], s=10, alpha=0.3,
+                   color=color, label=label, edgecolors="none")
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.set_title(title or f"{x_label} vs {y_label}")
+    ax.legend(loc="upper left", frameon=False)
+    ax.text(
+        0.97, 0.04, f"Pearson r = {pearson:.3f}",
+        transform=ax.transAxes, ha="right", va="bottom",
+        bbox=dict(boxstyle="round,pad=0.35", fc="white", ec="0.7", alpha=0.9),
+    )
+    _save(fig, save_path)
+    return fig, pearson
+
+
 __all__ = [
     "COLORS",
     "DATASET_COLORS",
     "SCORE_PALETTE",
+    "CATEGORY_COLORS",
     "plot_uncertainty_histogram",
     "plot_roc_curves",
     "plot_auroc_bar_chart",
@@ -470,4 +611,6 @@ __all__ = [
     "plot_confidence_histogram_on_ood",
     "plot_reliability_diagram",
     "plot_failure_modes",
+    "plot_score_category_bar_chart",
+    "plot_score_correlation_scatter",
 ]

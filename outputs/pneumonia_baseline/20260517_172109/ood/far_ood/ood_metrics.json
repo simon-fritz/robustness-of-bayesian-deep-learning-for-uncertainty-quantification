@@ -5,6 +5,11 @@
       "auprc": 0.829923163720644,
       "fpr_at_95_tpr": 0.9439102564102564
     },
+    "one_minus_max_softmax": {
+      "auroc": 0.47161245774589833,
+      "auprc": 0.8299234084676659,
+      "fpr_at_95_tpr": 0.9439102564102564
+    },
     "mutual_information": {
       "auroc": 0.5,
       "auprc": 0.8457354758961682,
@@ -15,10 +20,15 @@
       "auprc": 0.829923163720644,
       "fpr_at_95_tpr": 0.9439102564102564
     },
-    "one_minus_max_softmax": {
-      "auroc": 0.47161245774589833,
-      "auprc": 0.8299234084676659,
-      "fpr_at_95_tpr": 0.9439102564102564
+    "softmax_variance_sum": {
+      "auroc": 0.5,
+      "auprc": 0.8457354758961682,
+      "fpr_at_95_tpr": 1.0
+    },
+    "softmax_variance_max": {
+      "auroc": 0.5,
+      "auprc": 0.8457354758961682,
+      "fpr_at_95_tpr": 1.0
     }
   }
 }

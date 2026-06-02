@@ -116,5 +116,47 @@ class LastLayerLaplace(BayesianMethod):
         return self.la.predictive_samples(x, pred_type="nn", n_samples=n)
 
     @torch.no_grad()
+    def glm_logit_distribution(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Analytical Gaussian over the logits via ``pred_type="glm"``.
+
+        Returns ``(logit_mean, logit_var)`` of shape ``(B, C)`` each — the mean
+        and per-class (diagonal) variance of the Gaussian posterior over the
+        logits induced by the Gaussian posterior over the last-layer weights.
+        Sampling-free; this is the natural "variance of a Gaussian" uncertainty.
+        """
+        if self.la is None:
+            raise RuntimeError("LastLayerLaplace.fit must be called before predict.")
+        x = x.to(self.device)
+        f_mu, f_var = self.la._glm_predictive_distribution(x, diagonal_output=True)
+        return f_mu, f_var
+
+    @torch.no_grad()
+    def predict_modes(
+        self,
+        x: torch.Tensor,
+        n_samples: int | None = None,
+        modes: tuple[str, ...] = ("mc", "glm"),
+    ) -> dict[str, torch.Tensor | None]:
+        """Run one or both prediction modes and return a structured result.
+
+        * ``"mc"``  → MC samples of softmax probabilities (``softmax_samples``).
+        * ``"glm"`` → analytical Gaussian over logits (``logit_mean``/``logit_var``).
+
+        Returns a dict with keys ``softmax_samples`` ``(S, B, C)``,
+        ``logit_mean`` ``(B, C)``, ``logit_var`` ``(B, C)`` — each ``None`` if
+        the corresponding mode was not requested.
+        """
+        out: dict[str, torch.Tensor | None] = {
+            "softmax_samples": None, "logit_mean": None, "logit_var": None,
+        }
+        if "mc" in modes:
+            out["softmax_samples"] = self.predictive_samples(x, n_samples)
+        if "glm" in modes:
+            out["logit_mean"], out["logit_var"] = self.glm_logit_distribution(x)
+        return out
+
+    @torch.no_grad()
     def predict(self, x: torch.Tensor, n_samples: int | None = None) -> torch.Tensor:
         return self.predictive_samples(x, n_samples).mean(dim=0)

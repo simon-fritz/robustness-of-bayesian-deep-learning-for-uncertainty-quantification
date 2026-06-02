@@ -4,6 +4,12 @@ Pure post-hoc against a trained run for far_ood / near_ood scenarios. For
 held_out_class and long_tail scenarios, the run's training config must already
 match the OOD eval config (the script asserts this).
 
+For Laplace runs both prediction modes are computed and cached: MC softmax
+samples (entropy / spread scores) and the analytical Gaussian over the logits
+(``pred_type="glm"``, the sampling-free logit-variance scores). The score
+table groups every measure by conceptual family (see
+``evaluation.ood.SCORE_CATEGORIES``).
+
 Usage:
     python scripts/evaluate_ood.py \\
         --run-dir outputs/pneumonia_baseline/<timestamp> \\
@@ -23,18 +29,25 @@ from sklearn.metrics import roc_curve
 
 from bnn_medmnist.data.medmnist_loader import MedMNISTLoader
 from bnn_medmnist.data.ood_pairs import build_ood_loaders, ood_pair_from_cfg
-from bnn_medmnist.evaluation.ood import SCORE_FNS, evaluate_ood
+from bnn_medmnist.evaluation.ood import (
+    SCORE_CATEGORIES,
+    ood_metrics_from_scores,
+    per_sample_scores,
+)
 from bnn_medmnist.evaluation.plots import (
     plot_auroc_bar_chart,
     plot_confidence_histogram_on_ood,
     plot_failure_modes,
     plot_roc_curves,
+    plot_score_category_bar_chart,
+    plot_score_correlation_scatter,
     plot_uncertainty_histogram,
     plot_uncertainty_scatter,
 )
 from bnn_medmnist.evaluation.uncertainty import (
     expected_entropy,
     mutual_information,
+    predictive_entropy,
 )
 from bnn_medmnist.models.small_cnn import SmallCNN
 
@@ -54,26 +67,33 @@ def _load_model(cfg, ckpt_path, device, num_classes, in_channels) -> SmallCNN:
 
 
 @torch.no_grad()
-def _collect(model, loader, device, *, method_name: str, la=None, n_samples: int = 1):
-    """Run inference and also collect raw images + labels for later plotting.
+def _collect(model, loader, device, *, method_name: str, predictor=None, n_samples: int = 1):
+    """Run inference and collect predictions, images, labels, and logit moments.
 
-    Returns ``(probs_samples[S, N, C], images[N, ...], labels[N])``.
+    Returns ``(probs[S, N, C], images[N, ...], labels[N], logit_mean, logit_var)``
+    where the logit moments are ``(N, C)`` tensors for Laplace runs and ``None``
+    for deterministic runs (no posterior over weights).
     """
-    all_p, all_x, all_y = [], [], []
+    all_p, all_x, all_y, all_lm, all_lv = [], [], [], [], []
     for x, y in loader:
         all_x.append(x.cpu())
         all_y.append(y.cpu() if isinstance(y, torch.Tensor) else torch.as_tensor(y))
         if method_name == "deterministic":
             p = torch.softmax(model(x.to(device)), dim=-1).cpu().unsqueeze(0)
         elif method_name == "last_layer_laplace":
-            p = la.predictive_samples(x.to(device), pred_type="nn", n_samples=n_samples).cpu()
+            res = predictor.predict_modes(x.to(device), n_samples=n_samples, modes=("mc", "glm"))
+            p = res["softmax_samples"].cpu()
+            all_lm.append(res["logit_mean"].cpu())
+            all_lv.append(res["logit_var"].cpu())
         else:
             raise NotImplementedError(f"method '{method_name}' not supported")
         all_p.append(p)
     probs = torch.cat(all_p, dim=1)
     images = torch.cat(all_x, dim=0)
     labels = torch.cat(all_y, dim=0)
-    return probs, images, labels
+    logit_mean = torch.cat(all_lm, dim=0) if all_lm else None
+    logit_var = torch.cat(all_lv, dim=0) if all_lv else None
+    return probs, images, labels, logit_mean, logit_var
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +142,8 @@ def _render_scenario_plots(
     fig_dir: Path,
     preds_id: torch.Tensor,
     preds_ood: torch.Tensor,
+    id_scores: dict[str, torch.Tensor | None],
+    ood_scores: dict[str, torch.Tensor | None],
     images_id: torch.Tensor,
     labels_id: torch.Tensor,
     images_ood: torch.Tensor,
@@ -133,11 +155,11 @@ def _render_scenario_plots(
     """Render and save every per-scenario figure. Returns saved-figure paths."""
     written: list[Path] = []
 
-    # per-score histograms + ROC overlay
+    # per-score histograms + ROC overlay — over every *computable* score.
     score_results: dict[str, tuple[np.ndarray, np.ndarray, float]] = {}
-    for name, fn in SCORE_FNS.items():
-        id_s = fn(preds_id).cpu().numpy()
-        ood_s = fn(preds_ood).cpu().numpy()
+    for name in metrics:  # metrics already excludes N/A scores
+        id_s = id_scores[name].cpu().numpy()
+        ood_s = ood_scores[name].cpu().numpy()
         auroc = float(metrics[name]["auroc"])
         path = fig_dir / f"hist_{ood_name}_{name}"
         plot_uncertainty_histogram(id_s, ood_s, name, ood_name, auroc, path)
@@ -151,6 +173,15 @@ def _render_scenario_plots(
     roc_path = fig_dir / f"roc_{ood_name}"
     plot_roc_curves(score_results, ood_name, roc_path)
     written.append(roc_path.with_suffix(".png"))
+
+    # AUROC bars grouped by conceptual family.
+    cat_path = fig_dir / f"auroc_by_category_{ood_name}"
+    plot_score_category_bar_chart(
+        {name: m["auroc"] for name, m in metrics.items()},
+        SCORE_CATEGORIES, cat_path,
+        title=f"OOD-detection AUROC by score family — ID vs {ood_name}",
+    )
+    written.append(cat_path.with_suffix(".png"))
 
     # epistemic vs aleatoric scatter
     epis_id = mutual_information(preds_id).cpu().numpy()
@@ -167,6 +198,24 @@ def _render_scenario_plots(
     )
     written.append(scatter_path.with_suffix(".png"))
 
+    # MI vs logit-variance scatter (Hüllermeier: same info or not?) — Laplace only.
+    if id_scores.get("logit_variance_sum") is not None:
+        mi_all = np.concatenate([epis_id, epis_ood])
+        lv_all = np.concatenate([
+            id_scores["logit_variance_sum"].cpu().numpy(),
+            ood_scores["logit_variance_sum"].cpu().numpy(),
+        ])
+        is_ood = np.concatenate([np.zeros_like(epis_id, dtype=bool),
+                                 np.ones_like(epis_ood, dtype=bool)])
+        mivlv_path = fig_dir / f"mi_vs_logitvar_{ood_name}"
+        _, r = plot_score_correlation_scatter(
+            mi_all, lv_all, is_ood, mivlv_path,
+            x_label="Mutual Information", y_label="Logit Variance (sum)",
+            title=f"MI vs Logit Variance — ID vs {ood_name}",
+        )
+        written.append(mivlv_path.with_suffix(".png"))
+        print(f"  [scatter] MI vs logit-variance Pearson r = {r:.3f}", flush=True)
+
     # OOD confidence histogram (1 - MSP, but plotted as max softmax)
     mean_ood = preds_ood.mean(dim=0)
     msp_ood = mean_ood.max(dim=-1).values.cpu().numpy()
@@ -180,7 +229,6 @@ def _render_scenario_plots(
         u_id = mutual_information(preds_id).cpu().numpy()
         u_ood = mutual_information(preds_ood).cpu().numpy()
     else:
-        from bnn_medmnist.evaluation.uncertainty import predictive_entropy
         u_id = predictive_entropy(preds_id).cpu().numpy()
         u_ood = predictive_entropy(preds_ood).cpu().numpy()
     pred_id = preds_id.mean(dim=0).argmax(dim=-1).cpu().numpy()
@@ -210,6 +258,26 @@ def _render_summary(metrics_by_ood, method_name: str, scenario: str, fig_dir: Pa
     path = fig_dir / "auroc_summary"
     plot_auroc_bar_chart(rows, path)
     return path.with_suffix(".png")
+
+
+# ---------------------------------------------------------------------------
+# grouped console summary
+# ---------------------------------------------------------------------------
+def _print_grouped_summary(all_metrics, scenario: str, method_name: str) -> None:
+    """Print the AUROC table grouped by conceptual score family."""
+    name_w = max(len(n) for n in (s for names in SCORE_CATEGORIES.values() for s in names))
+    print(f"\nOOD metrics — scenario={scenario}, method={method_name}")
+    for ood_name, scores in all_metrics.items():
+        print(f"\n  OOD set: {ood_name}")
+        for category, names in SCORE_CATEGORIES.items():
+            print(f"\n    {category}")
+            print(f"    {'score':<{name_w}}  {'AUROC':>7}  {'AUPRC':>7}  {'FPR@95':>7}")
+            for s in names:
+                if s in scores:
+                    m = scores[s]
+                    print(f"    {s:<{name_w}}  {m['auroc']:>7.4f}  {m['auprc']:>7.4f}  {m['fpr_at_95_tpr']:>7.4f}")
+                else:
+                    print(f"    {s:<{name_w}}  {'N/A — requires posterior over weights':>7}")
 
 
 # ---------------------------------------------------------------------------
@@ -245,10 +313,12 @@ def main() -> None:
         id_loader.metadata.num_classes, id_loader.metadata.in_channels,
     )
 
-    la = None
+    predictor = None
     n_samples = int(args.n_samples or ood_cfg.get("n_predictive_samples", 100))
     if method_name == "last_layer_laplace":
         from laplace import Laplace
+
+        from bnn_medmnist.methods.last_layer_laplace import LastLayerLaplace
         la_path = ckpt_path.with_suffix(".laplace.pt")
         payload = torch.load(la_path, map_location=device, weights_only=False)
         la = Laplace(
@@ -257,6 +327,10 @@ def main() -> None:
             hessian_structure=payload["hessian_structure"],
         )
         la.load_state_dict(payload["state_dict"])
+        # Wrap the fitted Laplace so we can use predict_modes (mc + glm).
+        predictor = LastLayerLaplace(device=device)
+        predictor.model = model
+        predictor.la = la
 
     pair = ood_pair_from_cfg(ood_cfg)
     batch_size = int(ood_cfg.get("batch_size", 256))
@@ -290,36 +364,46 @@ def main() -> None:
                                         key=lambda kv: int(kv[0]))]
 
     print("[evaluate_ood] predicting on ID test set...", flush=True)
-    preds_id, images_id, labels_id = _collect(
+    preds_id, images_id, labels_id, lm_id, lv_id = _collect(
         model, id_loader_t, device,
-        method_name=method_name, la=la, n_samples=n_samples,
+        method_name=method_name, predictor=predictor, n_samples=n_samples,
     )
-    np.savez(
-        scenario_dir / "id_predictions.npz",
-        probs_samples=preds_id.numpy().astype(np.float32),
-        images=images_id.numpy().astype(np.float32),
-        labels=labels_id.numpy().astype(np.int64),
-    )
+    id_save = {
+        "probs_samples": preds_id.numpy().astype(np.float32),
+        "images": images_id.numpy().astype(np.float32),
+        "labels": labels_id.numpy().astype(np.int64),
+    }
+    if lm_id is not None:
+        id_save["logit_mean"] = lm_id.numpy().astype(np.float32)
+        id_save["logit_var"] = lv_id.numpy().astype(np.float32)
+    np.savez(scenario_dir / "id_predictions.npz", **id_save)
+
+    id_scores = per_sample_scores(preds_id, lm_id, lv_id)
 
     all_metrics: dict[str, dict[str, dict[str, float]]] = {}
     written_figs: list[Path] = []
     for ood_name, ood_loader in ood_loaders.items():
         print(f"[evaluate_ood] predicting on OOD '{ood_name}'...", flush=True)
-        preds_ood, images_ood, _ = _collect(
+        preds_ood, images_ood, _, lm_ood, lv_ood = _collect(
             model, ood_loader, device,
-            method_name=method_name, la=la, n_samples=n_samples,
+            method_name=method_name, predictor=predictor, n_samples=n_samples,
         )
-        np.savez(
-            scenario_dir / f"{ood_name}_predictions.npz",
-            probs_samples=preds_ood.numpy().astype(np.float32),
-            images=images_ood.numpy().astype(np.float32),
-        )
+        ood_save = {
+            "probs_samples": preds_ood.numpy().astype(np.float32),
+            "images": images_ood.numpy().astype(np.float32),
+        }
+        if lm_ood is not None:
+            ood_save["logit_mean"] = lm_ood.numpy().astype(np.float32)
+            ood_save["logit_var"] = lv_ood.numpy().astype(np.float32)
+        np.savez(scenario_dir / f"{ood_name}_predictions.npz", **ood_save)
 
-        metrics = evaluate_ood(preds_id, preds_ood)
+        ood_scores = per_sample_scores(preds_ood, lm_ood, lv_ood)
+        metrics = ood_metrics_from_scores(id_scores, ood_scores)
         all_metrics[ood_name] = metrics
 
         written_figs += _render_scenario_plots(
             fig_dir=fig_dir, preds_id=preds_id, preds_ood=preds_ood,
+            id_scores=id_scores, ood_scores=ood_scores,
             images_id=images_id, labels_id=labels_id, images_ood=images_ood,
             ood_name=ood_name, scenario=scenario, metrics=metrics,
             class_names=class_names,
@@ -328,17 +412,7 @@ def main() -> None:
     written_figs.append(_render_summary(all_metrics, method_name, scenario, fig_dir))
     (scenario_dir / "ood_metrics.json").write_text(json.dumps(all_metrics, indent=2))
 
-    # Pretty summary
-    score_names = list(SCORE_FNS.keys())
-    name_w = max(len(n) for n in score_names)
-    print(f"\nOOD metrics — scenario={scenario}, method={method_name}")
-    print("-" * (name_w + 60))
-    for ood_name, scores in all_metrics.items():
-        print(f"\n  OOD set: {ood_name}")
-        print(f"  {'score':<{name_w}}  {'AUROC':>7}  {'AUPRC':>7}  {'FPR@95':>7}")
-        for s in score_names:
-            m = scores[s]
-            print(f"  {s:<{name_w}}  {m['auroc']:>7.4f}  {m['auprc']:>7.4f}  {m['fpr_at_95_tpr']:>7.4f}")
+    _print_grouped_summary(all_metrics, scenario, method_name)
     print(f"\nsaved: {scenario_dir / 'ood_metrics.json'}")
     print("figures written:")
     for p in written_figs:

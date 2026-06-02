@@ -58,14 +58,30 @@ def _deterministic_samples(model, loader, device) -> tuple[torch.Tensor, torch.T
 
 
 @torch.no_grad()
-def _laplace_samples(la, loader, device, n_samples: int) -> tuple[torch.Tensor, torch.Tensor]:
-    """Return ``(probs[S, N, C], y[N])`` from the Laplace posterior."""
-    all_p, all_y = [], []
+def _laplace_samples(
+    la, loader, device, n_samples: int
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Return ``(probs[S, N, C], y[N], logit_mean[N, C], logit_var[N, C])``.
+
+    The MC softmax samples drive the entropy/spread scores; the analytical
+    Gaussian over logits (``pred_type="glm"``) gives the sampling-free
+    logit-variance scores.
+    """
+    all_p, all_y, all_lm, all_lv = [], [], [], []
     for x, y in loader:
-        s = la.predictive_samples(x.to(device), pred_type="nn", n_samples=n_samples).cpu()
+        xb = x.to(device)
+        s = la.predictive_samples(xb, pred_type="nn", n_samples=n_samples).cpu()
+        f_mu, f_var = la._glm_predictive_distribution(xb, diagonal_output=True)
         all_p.append(s)
         all_y.append(y)
-    return torch.cat(all_p, dim=1), torch.cat(all_y)
+        all_lm.append(f_mu.cpu())
+        all_lv.append(f_var.cpu())
+    return (
+        torch.cat(all_p, dim=1),
+        torch.cat(all_y),
+        torch.cat(all_lm, dim=0),
+        torch.cat(all_lv, dim=0),
+    )
 
 
 def main() -> None:
@@ -90,6 +106,7 @@ def main() -> None:
     data = MedMNISTLoader(cfg.data)
     model = _load_model(cfg, ckpt_path, device, data.metadata.num_classes, data.metadata.in_channels)
 
+    logit_mean = logit_var = None
     if method_name == "deterministic":
         probs_samples, y = _deterministic_samples(model, data.test_loader(), device)
     elif method_name == "last_layer_laplace":
@@ -104,7 +121,9 @@ def main() -> None:
         la.load_state_dict(payload["state_dict"])
         n_samples = int(args.n_samples or cfg.method.laplace.n_predictive_samples)
         print(f"drawing {n_samples} predictive samples per test example...", flush=True)
-        probs_samples, y = _laplace_samples(la, data.test_loader(), device, n_samples)
+        probs_samples, y, logit_mean, logit_var = _laplace_samples(
+            la, data.test_loader(), device, n_samples
+        )
     else:
         raise NotImplementedError(f"evaluate not implemented for method '{method_name}'")
 
@@ -135,11 +154,16 @@ def main() -> None:
         print(f"{k:<{width}}  {v:.4f}")
 
     (run_dir / "test_metrics.json").write_text(json.dumps(metrics, indent=2))
-    np.savez(
-        run_dir / "test_predictions.npz",
-        probs_samples=probs_samples.numpy().astype(np.float32),
-        labels=y.numpy().astype(np.int64),
-    )
+    save_arrays = {
+        "probs_samples": probs_samples.numpy().astype(np.float32),
+        "labels": y.numpy().astype(np.int64),
+    }
+    # Analytical Gaussian over logits (Laplace only); deterministic runs have
+    # no posterior over weights, so these fields are simply omitted.
+    if logit_mean is not None and logit_var is not None:
+        save_arrays["logit_mean"] = logit_mean.numpy().astype(np.float32)
+        save_arrays["logit_var"] = logit_var.numpy().astype(np.float32)
+    np.savez(run_dir / "test_predictions.npz", **save_arrays)
     fig_dir = run_dir / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
     rel_path = fig_dir / "reliability_diagram"
