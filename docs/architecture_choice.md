@@ -3,11 +3,10 @@
 We initially built the pipeline on a small from-scratch CNN (`SmallCNN`) to
 validate the end-to-end flow — data loading, training, last-layer Laplace, OOD
 scoring — quickly and cheaply. **From now on the main architecture is an
-ImageNet-pretrained ResNet-18, used without batch normalization** (we replace it
-with GroupNorm, because batch statistics make a prediction depend on the rest of
-the batch and get renormalized away on OOD inputs — both of which corrupt the
-uncertainty and OOD scores that are the whole point of this project). `SmallCNN`
-is kept only as a fast pipeline smoke-test.
+ImageNet-pretrained ResNet-18**, with `SmallCNN` kept only as a fast pipeline
+smoke-test. The ResNet uses the stock torchvision BatchNorm; at inference it runs
+in `eval()` mode, so BatchNorm uses fixed running statistics and predictions are
+batch-independent.
 
 ## Why ResNet-18 specifically (not ResNet-50, ViT, DenseNet, …)
 
@@ -43,5 +42,4 @@ doubles training time and memory for marginal gain on these small datasets.
 - Li et al. (2025), position paper on Bayesian deep learning for OOD detection.
 - Kristiadi, Hein & Hennig (2020), *Being Bayesian, Even Just a Bit, Fixes
   Overconfidence in ReLU Networks* (last-layer Laplace on ResNet-18).
-- Wu & He (2018), *Group Normalization* (batch-independent normalization).
 </content>
