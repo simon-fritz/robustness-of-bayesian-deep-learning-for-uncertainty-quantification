@@ -1,0 +1,17 @@
+# Experiment: Deep-ensemble on PneumoniaMNIST.
+defaults:
+  - /data: pneumoniamnist
+  - /model: small_cnn
+  - /method: deep_ensemble
+  - _self_
+
+experiment_name: pneumonia_deep_ensemble
+run_name: pneumonia_deep_ensemble
+seed: 42
+
+# Number of ensemble members (will override method default if present)
+method:
+  n_members: 5
+
+output_dir: outputs
+checkpoint_dir: checkpoints

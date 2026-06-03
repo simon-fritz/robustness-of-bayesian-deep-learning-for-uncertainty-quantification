@@ -68,6 +68,22 @@ def _laplace_samples(la, loader, device, n_samples: int) -> tuple[torch.Tensor, 
     return torch.cat(all_p, dim=1), torch.cat(all_y)
 
 
+@torch.no_grad()
+def _deep_ensemble_samples(members, loader, device) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return ``(probs[S, N, C], y[N])`` from the ensemble."""
+    all_p, all_y = [], []
+    for x, y in loader:
+        batch_probs = []
+        for member in members:
+            probs = torch.softmax(member(x.to(device)), dim=-1).cpu()
+            batch_probs.append(probs)
+        
+        s = torch.stack(batch_probs, dim=0)
+        all_p.append(s)
+        all_y.append(y)
+    
+    return torch.cat(all_p, dim=1), torch.cat(all_y)
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate a trained model on the test split.")
     parser.add_argument("--run-dir", required=True)
@@ -88,11 +104,12 @@ def main() -> None:
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     data = MedMNISTLoader(cfg.data)
-    model = _load_model(cfg, ckpt_path, device, data.metadata.num_classes, data.metadata.in_channels)
 
     if method_name == "deterministic":
+        model = _load_model(cfg, ckpt_path, device, data.metadata.num_classes, data.metadata.in_channels)
         probs_samples, y = _deterministic_samples(model, data.test_loader(), device)
     elif method_name == "last_layer_laplace":
+        model = _load_model(cfg, ckpt_path, device, data.metadata.num_classes, data.metadata.in_channels)
         from laplace import Laplace
         la_path = ckpt_path.with_suffix(".laplace.pt")
         payload = torch.load(la_path, map_location=device, weights_only=False)
@@ -105,6 +122,29 @@ def main() -> None:
         n_samples = int(args.n_samples or cfg.method.laplace.n_predictive_samples)
         print(f"drawing {n_samples} predictive samples per test example...", flush=True)
         probs_samples, y = _laplace_samples(la, data.test_loader(), device, n_samples)
+        
+        
+    elif method_name == "deep_ensemble":
+        # Discover ensemble member checkpoints in the same directory as the main checkpoint.
+        ckpt_dir = ckpt_path.parent
+        member_files = sorted(ckpt_dir.glob("member_*.pt"))
+        if not member_files:
+            # Fallback: try a configured n_members or default to 5
+            try:
+                n_members = int(cfg.method.get("n_members", 5))
+            except Exception:
+                n_members = 5
+            member_files = [ckpt_dir / f"member_{i}.pt" for i in range(n_members)]
+
+        members = []
+        for member_ckpt in member_files:
+            if not Path(member_ckpt).exists():
+                raise FileNotFoundError(f"Ensemble member checkpoint not found: {member_ckpt}")
+            member = _load_model(cfg, member_ckpt, device, data.metadata.num_classes, data.metadata.in_channels)
+            members.append(member)
+
+        probs_samples, y = _deep_ensemble_samples(members, data.test_loader(), device)
+            
     else:
         raise NotImplementedError(f"evaluate not implemented for method '{method_name}'")
 
