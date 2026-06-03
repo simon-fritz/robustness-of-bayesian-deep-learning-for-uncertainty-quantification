@@ -24,6 +24,85 @@ def _squeeze_target(y):
     return int(y)
 
 
+class _AdaptChannels:
+    """Convert a CHW float tensor to ``target`` channels (1<->3 only).
+
+    A picklable functor (not a lambda) so it survives DataLoader worker spawning.
+    """
+
+    def __init__(self, target: int) -> None:
+        self.target = int(target)
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        c = x.shape[0]
+        if c == self.target:
+            return x
+        if c == 1 and self.target == 3:
+            return x.repeat(3, 1, 1)
+        if c == 3 and self.target == 1:
+            return x.mean(dim=0, keepdim=True)
+        raise ValueError(f"unsupported channel adaptation {c} -> {self.target}")
+
+
+def effective_shape(native_channels: int, image_transform_cfg) -> tuple[int, int]:
+    """Return ``(channels, resolution)`` produced for a given transform config.
+
+    With no ``image_transform`` the loader keeps native channels at 28x28.
+    """
+    if image_transform_cfg is None:
+        return native_channels, 28
+    get = getattr(image_transform_cfg, "get", None)
+    expand = get("expand_channels_to", None) if get else image_transform_cfg.get("expand_channels_to")
+    resize = get("resize", None) if get else image_transform_cfg.get("resize")
+    channels = int(expand) if expand else native_channels
+    resolution = int(resize) if resize else 28
+    return channels, resolution
+
+
+def build_image_transform(native_channels: int, image_transform_cfg=None):
+    """Build the input transform pipeline.
+
+    With ``image_transform_cfg=None`` this reproduces the legacy behavior:
+    ``ToTensor`` + per-channel Normalize to ``[-1, 1]`` at native resolution.
+
+    Otherwise the config block drives an ImageNet-style pipeline::
+
+        image_transform:
+          resize: 224
+          expand_channels_to: 3
+          normalize: {mean: [...], std: [...]}
+
+    The same builder is used for ID and OOD loaders so they produce identically
+    shaped tensors.
+    """
+    if image_transform_cfg is None:
+        mean = [0.5] * native_channels
+        std = [0.5] * native_channels
+        return transforms.Compose(
+            [transforms.ToTensor(), transforms.Normalize(mean, std)]
+        )
+
+    get = getattr(image_transform_cfg, "get", None)
+    def _cfg(key, default=None):
+        return get(key, default) if get else image_transform_cfg.get(key, default)
+
+    resize = _cfg("resize")
+    expand = _cfg("expand_channels_to")
+    normalize = _cfg("normalize")
+
+    ops: list = []
+    if resize:
+        ops.append(transforms.Resize((int(resize), int(resize))))
+    ops.append(transforms.ToTensor())
+    if expand:
+        ops.append(_AdaptChannels(int(expand)))
+    if normalize is not None:
+        mean = list(normalize["mean"])
+        std = list(normalize["std"])
+        ops.append(transforms.Normalize(mean, std))
+    return transforms.Compose(ops)
+
+
 def _labels_array(ds) -> np.ndarray:
     """Return the integer label vector for a MedMNIST dataset object."""
     return np.asarray(ds.labels).flatten().astype(int)
@@ -49,12 +128,14 @@ class MedMNISTLoader(BaseDataset):
         num_classes = len(info["label"])
         DataClass = getattr(medmnist, info["python_class"])
 
-        # Normalize to [-1, 1] regardless of channel count.
-        mean = [0.5] * n_channels
-        std = [0.5] * n_channels
-        tfm = transforms.Compose(
-            [transforms.ToTensor(), transforms.Normalize(mean, std)]
-        )
+        # Input transform: legacy [-1, 1] by default, or an ImageNet-style
+        # pipeline (resize / channel-expand / normalize) when image_transform is
+        # set (e.g. for the pretrained ResNet-18). The produced tensor shape is
+        # recorded in metadata so models and the OOD loaders stay consistent.
+        getter0 = getattr(cfg, "get", None)
+        self._image_transform_cfg = getter0("image_transform", None) if getter0 else None
+        tfm = build_image_transform(n_channels, self._image_transform_cfg)
+        out_channels, out_resolution = effective_shape(n_channels, self._image_transform_cfg)
 
         root = Path(os.path.expanduser(str(cfg.root)))
         if not root.is_absolute():
@@ -88,7 +169,7 @@ class MedMNISTLoader(BaseDataset):
 
         self._meta = DatasetMetadata(
             name=flag, num_classes=num_classes,
-            in_channels=n_channels, image_size=28,
+            in_channels=out_channels, image_size=out_resolution,
         )
         self._batch_size = int(cfg.batch_size)
         self._num_workers = int(cfg.num_workers)
@@ -138,6 +219,12 @@ class MedMNISTLoader(BaseDataset):
     @property
     def metadata(self) -> DatasetMetadata:
         return self._meta
+
+    @property
+    def image_transform_cfg(self):
+        """The ``image_transform`` config block (or ``None``); used to build
+        OOD loaders that produce identically shaped tensors."""
+        return self._image_transform_cfg
 
     @property
     def excluded_classes(self) -> list[int]:

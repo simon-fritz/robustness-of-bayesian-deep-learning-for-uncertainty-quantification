@@ -1,0 +1,33 @@
+# Experiment: Last-Layer Laplace on a pre-trained ResNet-18, PneumoniaMNIST.
+# Same architecture as pneumonia_resnet18_baseline, Bayesian last layer.
+defaults:
+  - /data: pneumoniamnist
+  - /model: resnet18
+  - /method: last_layer_laplace
+  - _self_
+
+experiment_name: pneumonia_resnet18_lll
+run_name: pneumonia_resnet18_lll
+seed: 42
+
+# OOD sources to evaluate against (resolved by data/ood_pairs.py).
+ood_datasets: [bloodmnist, organamnist]
+
+# ImageNet-style preprocessing required by the pretrained ResNet-18.
+data:
+  image_transform:
+    resize: 224
+    expand_channels_to: 3
+    normalize:
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+
+# Fine-tuning training choices for the MAP phase: lower LR + fewer epochs.
+method:
+  training:
+    lr: 1.0e-4
+    epochs: 15
+    use_amp: false      # opt-in CUDA mixed precision
+
+output_dir: outputs
+checkpoint_dir: checkpoints

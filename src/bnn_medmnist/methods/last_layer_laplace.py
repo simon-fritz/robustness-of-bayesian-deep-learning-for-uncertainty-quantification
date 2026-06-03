@@ -68,6 +68,19 @@ class LastLayerLaplace(BayesianMethod):
         self.model = trainer.fit(model, train_loader, val_loader)
         self.model.eval()
 
+        # Last-layer Laplace targets the final classifier by the name ``fc``.
+        # This works for both SmallCNN and PretrainedResNet18 because both expose
+        # their classifier head as a top-level ``fc`` (torchvision ResNets use
+        # that exact name). Assert it loudly so a future architecture without an
+        # ``fc`` Linear fails here rather than deep inside laplace-torch.
+        fc = getattr(self.model, "fc", None)
+        if not isinstance(fc, nn.Linear):
+            raise AttributeError(
+                f"last_layer_laplace requires the model to expose an nn.Linear "
+                f"attribute named 'fc' (got {type(fc).__name__}). "
+                f"Models: SmallCNN, PretrainedResNet18 both satisfy this."
+            )
+
         # Phase 2: Laplace approximation.
         cfg = self.laplace_cfg
         subset = str(getattr(cfg, "subset_of_weights", "last_layer"))

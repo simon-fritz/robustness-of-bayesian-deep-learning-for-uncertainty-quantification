@@ -31,14 +31,11 @@ from bnn_medmnist.evaluation.uncertainty import (
     mutual_information,
     predictive_entropy,
 )
-from bnn_medmnist.models.small_cnn import SmallCNN
+from bnn_medmnist.models import build_model
 
 
-def _load_model(cfg, ckpt_path: Path, device: str, num_classes: int, in_channels: int) -> SmallCNN:
-    model = SmallCNN(
-        in_channels=in_channels, num_classes=num_classes,
-        dropout=float(cfg.model.get("dropout", 0.0)),
-    ).to(device)
+def _load_model(cfg, ckpt_path: Path, device: str, num_classes: int, in_channels: int):
+    model = build_model(cfg.model, in_channels=in_channels, num_classes=num_classes).to(device)
     state = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(state)
     model.eval()

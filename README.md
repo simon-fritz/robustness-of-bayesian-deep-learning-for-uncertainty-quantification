@@ -30,6 +30,29 @@ export DATA_ROOT=/some/shared/path
 Relative paths are resolved against the repository root, absolute paths and `~`
 are honored.
 
+## Models
+
+Two architectures coexist and are switchable via `cfg.model` (`configs/model/`):
+
+- **`small_cnn`** (`configs/model/small_cnn.yaml`) — compact from-scratch CNN for
+  native 28×28 MedMNIST inputs. Fast; used for pipeline validation and as a
+  controlled comparison point.
+- **`pretrained_resnet18`** (`configs/model/resnet18.yaml`) — ImageNet-pretrained
+  torchvision ResNet-18, fine-tuned. Inputs are resized to 224×224 and expanded
+  to 3 channels via the data loader's `image_transform` block. Its classifier
+  head is named `fc`, so last-layer Laplace works unchanged on both models.
+
+Both work with every method (deterministic, last-layer Laplace). See
+[docs/architecture_choice.md](docs/architecture_choice.md) for why ResNet-18 was
+chosen as the second architecture and what we deliberately did not pick.
+
+Example ResNet-18 experiments:
+
+```bash
+python scripts/train.py --config configs/experiment/pneumonia_resnet18_baseline.yaml
+python scripts/train.py --config configs/experiment/pneumonia_resnet18_lll.yaml
+```
+
 ## Configuration
 
 - Configs are Hydra-composable YAMLs under `configs/`.

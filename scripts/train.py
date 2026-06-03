@@ -16,7 +16,7 @@ from omegaconf import OmegaConf
 from bnn_medmnist.data.medmnist_loader import MedMNISTLoader
 from bnn_medmnist.methods.deterministic import Deterministic
 from bnn_medmnist.methods.last_layer_laplace import LastLayerLaplace
-from bnn_medmnist.models.small_cnn import SmallCNN
+from bnn_medmnist.models import build_model
 from bnn_medmnist.utils.config import load_experiment_config
 from bnn_medmnist.utils.logging import log_run_start
 from bnn_medmnist.utils.seeding import set_seed
@@ -41,6 +41,45 @@ def _apply_smoke_overrides(cfg) -> None:
     train_cfg.early_stopping_patience = 0
     if "laplace" in cfg.method:
         cfg.method.laplace.n_predictive_samples = 20
+
+
+def _assert_input_shape(model_cfg, data) -> None:
+    """Fail loudly if the data loader's output shape mismatches the model.
+
+    Compares the model config's declared ``input_channels`` / ``input_resolution``
+    (when present) against what the loader actually produces, and cross-checks a
+    real batch so a misconfigured transform is caught before training starts.
+    """
+    produced_c = int(data.metadata.in_channels)
+    produced_r = int(data.metadata.image_size)
+    exp_c = model_cfg.get("input_channels", None)
+    exp_r = model_cfg.get("input_resolution", None)
+    name = str(model_cfg.get("name", "model"))
+
+    if exp_c is not None and int(exp_c) != produced_c:
+        raise SystemExit(
+            f"[train] input-channel mismatch for model '{name}': expects "
+            f"{int(exp_c)} channels but the data loader produces {produced_c}. "
+            f"Fix data.image_transform.expand_channels_to."
+        )
+    if exp_r is not None and int(exp_r) != produced_r:
+        raise SystemExit(
+            f"[train] input-resolution mismatch for model '{name}': expects "
+            f"{int(exp_r)}x{int(exp_r)} but the data loader produces "
+            f"{produced_r}x{produced_r}. Fix data.image_transform.resize."
+        )
+
+    # Cross-check against a real batch (catches transform bugs metadata misses).
+    x0, _ = next(iter(data.train_loader()))
+    got_c, got_h, got_w = int(x0.shape[1]), int(x0.shape[2]), int(x0.shape[3])
+    if got_c != produced_c or got_h != produced_r or got_w != produced_r:
+        raise SystemExit(
+            f"[train] data loader produced tensor of shape {tuple(x0.shape)} "
+            f"(C={got_c}, {got_h}x{got_w}) which disagrees with metadata "
+            f"(C={produced_c}, {produced_r}x{produced_r}). Check image_transform."
+        )
+    print(f"[train] input shape OK: model '{name}' <- C={produced_c}, "
+          f"{produced_r}x{produced_r}", flush=True)
 
 
 def _build_method(cfg, data, ckpt_path: Path, tb_dir: Path):
@@ -97,10 +136,11 @@ def main() -> None:
     data = MedMNISTLoader(cfg.data)
     print(f"class_distribution(train) = {data.class_distribution()}", flush=True)
 
-    model = SmallCNN(
+    _assert_input_shape(cfg.model, data)
+    model = build_model(
+        cfg.model,
         in_channels=data.metadata.in_channels,
         num_classes=data.metadata.num_classes,
-        dropout=float(cfg.model.get("dropout", 0.0)),
     )
     method = _build_method(cfg, data, ckpt_path, tb_dir)
     method.fit(model, data.train_loader(), data.val_loader())

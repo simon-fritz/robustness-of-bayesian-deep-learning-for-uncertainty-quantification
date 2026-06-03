@@ -49,21 +49,38 @@ from bnn_medmnist.evaluation.uncertainty import (
     mutual_information,
     predictive_entropy,
 )
-from bnn_medmnist.models.small_cnn import SmallCNN
+from bnn_medmnist.models import build_model
 
 
 # ---------------------------------------------------------------------------
 # model + prediction helpers (mirror scripts/evaluate.py)
 # ---------------------------------------------------------------------------
-def _load_model(cfg, ckpt_path, device, num_classes, in_channels) -> SmallCNN:
-    model = SmallCNN(
-        in_channels=in_channels, num_classes=num_classes,
-        dropout=float(cfg.model.get("dropout", 0.0)),
-    ).to(device)
+def _load_model(cfg, ckpt_path, device, num_classes, in_channels):
+    model = build_model(cfg.model, in_channels=in_channels, num_classes=num_classes).to(device)
     state = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(state)
     model.eval()
     return model
+
+
+def _assert_id_ood_shapes(id_loader_t, ood_loaders) -> None:
+    """Fail loudly unless ID and every OOD loader yield same-shape, same-dtype tensors.
+
+    With ResNet-18 both must be 3-channel 224x224; the transforms are applied on
+    the loader side, so a misconfigured OOD transform would otherwise surface as
+    a confusing runtime error mid-evaluation.
+    """
+    x_id, _ = next(iter(id_loader_t))
+    id_shape, id_dtype = tuple(x_id.shape[1:]), x_id.dtype
+    for name, loader in ood_loaders.items():
+        x_ood, _ = next(iter(loader))
+        if tuple(x_ood.shape[1:]) != id_shape or x_ood.dtype != id_dtype:
+            raise SystemExit(
+                f"[evaluate_ood] ID/OOD tensor mismatch for '{name}': "
+                f"ID={id_shape}/{id_dtype} vs OOD={tuple(x_ood.shape[1:])}/{x_ood.dtype}. "
+                f"OOD loaders must apply the same image_transform as the ID data."
+            )
+    print(f"[evaluate_ood] ID/OOD shape OK: {id_shape}, dtype={id_dtype}", flush=True)
 
 
 @torch.no_grad()
@@ -340,6 +357,7 @@ def main() -> None:
         pair, id_loader=id_loader,
         batch_size=batch_size, num_workers=num_workers, data_root=data_root,
     )
+    _assert_id_ood_shapes(id_loader_t, ood_loaders)
 
     scenario_dir = run_dir / "ood" / scenario
     fig_dir = scenario_dir / "figures"
