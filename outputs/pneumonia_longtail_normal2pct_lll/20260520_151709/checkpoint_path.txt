@@ -1,1 +1,0 @@
-/Users/simonfritz/Projekte/uni/adlm/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/checkpoints/pneumonia_longtail_normal2pct_lll/20260520_151709/best.pt

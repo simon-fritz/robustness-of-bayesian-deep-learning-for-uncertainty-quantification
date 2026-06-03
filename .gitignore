@@ -36,10 +36,13 @@ checkpoints/
 /data/
 wandb/
 
+#currently synced to tranfer files from slurm to local machine
 # Run outputs — ignore everything except small text artifacts worth tracking
-outputs/**
-!outputs/
-!outputs/**/
-!outputs/**/*.json
-!outputs/**/*.yaml
-!outputs/**/*.txt
+#outputs/**
+#!outputs/
+#!outputs/**/
+#!outputs/**/*.json
+#!outputs/**/*.yaml
+#!outputs/**/*.txt
+
+archieve
