@@ -18,15 +18,30 @@ predictions are essentially unchanged; only the confidence becomes honest.
 
 ## OOD detection (AUROC, higher = better)
 
-| Score | family | baseline | lll |
+Scores split into two conceptual orders (Hüllermeier & Waegeman 2021):
+
+- **First-order** — properties of a *single* predictive distribution (its
+  confidence / entropy). Defined for any model, including the deterministic one.
+- **Second-order** — the *spread of the posterior over distributions*, i.e.
+  epistemic uncertainty. Needs a posterior, so a deterministic model has none
+  (these collapse to ≈0.500 / "—").
+
+### First-order scores
+
+| Score | captures | baseline | lll |
 |---|---|---|---|
-| predictive_entropy | first-order | 0.618 | 0.810 |
-| one_minus_max_softmax | first-order | 0.618 | 0.810 |
+| predictive_entropy | total | 0.618 | 0.810 |
+| one_minus_max_softmax | total / confidence | 0.618 | 0.810 |
 | expected_entropy | aleatoric | 0.618 | 0.722 |
-| mutual_information | epistemic | 0.500 | 0.865 |
+
+### Second-order scores (epistemic / posterior spread)
+
+| Score | captures | baseline | lll |
+|---|---|---|---|
+| mutual_information | epistemic (BALD) | 0.500 | 0.865 |
 | softmax_variance | spread (MC) | 0.500 | 0.837 |
 | expected_pairwise_kl | spread (MC) | — | 0.928 |
-| logit_variance | Gaussian (Laplace only) | — | **0.956** |
+| logit_variance | analytical Gaussian (Laplace only) | — | **0.956** |
 
 ## Three takeaways
 
