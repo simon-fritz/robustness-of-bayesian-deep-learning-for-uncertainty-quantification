@@ -16,6 +16,7 @@ from omegaconf import OmegaConf
 from bnn_medmnist.data.medmnist_loader import MedMNISTLoader
 from bnn_medmnist.methods.deterministic import Deterministic
 from bnn_medmnist.methods.last_layer_laplace import LastLayerLaplace
+from bnn_medmnist.methods.deep_ensemble import DeepEnsemble
 from bnn_medmnist.models import build_model
 from bnn_medmnist.utils.config import load_experiment_config
 from bnn_medmnist.utils.logging import log_run_start
@@ -100,6 +101,12 @@ def _build_method(cfg, data, ckpt_path: Path, tb_dir: Path):
         return LastLayerLaplace(
             train_cfg=train_cfg, laplace_cfg=cfg.method.laplace,
             ckpt_path=ckpt_path, log_dir=tb_dir, class_weights=class_weights,
+        )
+    if name == "deep_ensemble":
+        n_members = int(cfg.method.get("n_members", 5))
+        return DeepEnsemble(
+            train_cfg=train_cfg, ckpt_path=ckpt_path, log_dir=tb_dir, 
+            class_weights=class_weights, n_members=n_members
         )
     raise NotImplementedError(f"method '{name}' is not wired up.")
 
