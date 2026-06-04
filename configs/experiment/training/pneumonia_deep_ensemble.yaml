@@ -1,7 +1,7 @@
 # Experiment: Deep-ensemble on PneumoniaMNIST.
 defaults:
   - /data: pneumoniamnist
-  - /model: small_cnn
+  - /model: resnet18
   - /method: deep_ensemble
   - _self_
 
