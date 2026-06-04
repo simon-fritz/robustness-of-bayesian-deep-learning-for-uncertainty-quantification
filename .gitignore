@@ -36,10 +36,16 @@ checkpoints/
 /data/
 wandb/
 
-# Run outputs — ignore everything except small text artifacts worth tracking
+# Run outputs — track small artifacts (metrics, configs, figures) but NEVER the
+# big prediction caches: *.npz store raw images, ~10 GB each at ResNet 224x224,
+# which GitHub rejects (>100 MB/file) and would balloon the repo.
 outputs/**
 !outputs/
 !outputs/**/
 !outputs/**/*.json
 !outputs/**/*.yaml
 !outputs/**/*.txt
+!outputs/**/*.png
+!outputs/**/*.pdf
+
+archieve

@@ -68,6 +68,19 @@ class LastLayerLaplace(BayesianMethod):
         self.model = trainer.fit(model, train_loader, val_loader)
         self.model.eval()
 
+        # Last-layer Laplace targets the final classifier by the name ``fc``.
+        # This works for both SmallCNN and PretrainedResNet18 because both expose
+        # their classifier head as a top-level ``fc`` (torchvision ResNets use
+        # that exact name). Assert it loudly so a future architecture without an
+        # ``fc`` Linear fails here rather than deep inside laplace-torch.
+        fc = getattr(self.model, "fc", None)
+        if not isinstance(fc, nn.Linear):
+            raise AttributeError(
+                f"last_layer_laplace requires the model to expose an nn.Linear "
+                f"attribute named 'fc' (got {type(fc).__name__}). "
+                f"Models: SmallCNN, PretrainedResNet18 both satisfy this."
+            )
+
         # Phase 2: Laplace approximation.
         cfg = self.laplace_cfg
         subset = str(getattr(cfg, "subset_of_weights", "last_layer"))
@@ -114,6 +127,48 @@ class LastLayerLaplace(BayesianMethod):
         n = int(n_samples) if n_samples is not None else self.n_samples
         x = x.to(self.device)
         return self.la.predictive_samples(x, pred_type="nn", n_samples=n)
+
+    @torch.no_grad()
+    def glm_logit_distribution(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Analytical Gaussian over the logits via ``pred_type="glm"``.
+
+        Returns ``(logit_mean, logit_var)`` of shape ``(B, C)`` each — the mean
+        and per-class (diagonal) variance of the Gaussian posterior over the
+        logits induced by the Gaussian posterior over the last-layer weights.
+        Sampling-free; this is the natural "variance of a Gaussian" uncertainty.
+        """
+        if self.la is None:
+            raise RuntimeError("LastLayerLaplace.fit must be called before predict.")
+        x = x.to(self.device)
+        f_mu, f_var = self.la._glm_predictive_distribution(x, diagonal_output=True)
+        return f_mu, f_var
+
+    @torch.no_grad()
+    def predict_modes(
+        self,
+        x: torch.Tensor,
+        n_samples: int | None = None,
+        modes: tuple[str, ...] = ("mc", "glm"),
+    ) -> dict[str, torch.Tensor | None]:
+        """Run one or both prediction modes and return a structured result.
+
+        * ``"mc"``  → MC samples of softmax probabilities (``softmax_samples``).
+        * ``"glm"`` → analytical Gaussian over logits (``logit_mean``/``logit_var``).
+
+        Returns a dict with keys ``softmax_samples`` ``(S, B, C)``,
+        ``logit_mean`` ``(B, C)``, ``logit_var`` ``(B, C)`` — each ``None`` if
+        the corresponding mode was not requested.
+        """
+        out: dict[str, torch.Tensor | None] = {
+            "softmax_samples": None, "logit_mean": None, "logit_var": None,
+        }
+        if "mc" in modes:
+            out["softmax_samples"] = self.predictive_samples(x, n_samples)
+        if "glm" in modes:
+            out["logit_mean"], out["logit_var"] = self.glm_logit_distribution(x)
+        return out
 
     @torch.no_grad()
     def predict(self, x: torch.Tensor, n_samples: int | None = None) -> torch.Tensor:

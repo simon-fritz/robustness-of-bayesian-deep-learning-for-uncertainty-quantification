@@ -22,13 +22,19 @@ from medmnist import INFO
 from omegaconf import OmegaConf
 from sklearn.metrics import roc_curve
 
-from bnn_medmnist.evaluation.ood import SCORE_FNS, evaluate_ood
+from bnn_medmnist.evaluation.ood import (
+    SCORE_CATEGORIES,
+    ood_metrics_from_scores,
+    per_sample_scores,
+)
 from bnn_medmnist.evaluation.plots import (
     plot_auroc_bar_chart,
     plot_confidence_histogram_on_ood,
     plot_failure_modes,
     plot_reliability_diagram,
     plot_roc_curves,
+    plot_score_category_bar_chart,
+    plot_score_correlation_scatter,
     plot_uncertainty_histogram,
     plot_uncertainty_scatter,
 )
@@ -78,6 +84,9 @@ def _regen_ood_plots(run_dir: Path, scenario_dir: Path, run_cfg) -> list[Path]:
     preds_id = torch.from_numpy(id_data["probs_samples"])
     images_id = id_data["images"]
     labels_id = id_data["labels"]
+    lm_id = torch.from_numpy(id_data["logit_mean"]) if "logit_mean" in id_data else None
+    lv_id = torch.from_numpy(id_data["logit_var"]) if "logit_var" in id_data else None
+    id_scores = per_sample_scores(preds_id, lm_id, lv_id)
 
     class_names = _class_names_for(str(run_cfg.data.flag))
 
@@ -92,13 +101,16 @@ def _regen_ood_plots(run_dir: Path, scenario_dir: Path, run_cfg) -> list[Path]:
         ood_data = _load_npz(ood_file)
         preds_ood = torch.from_numpy(ood_data["probs_samples"])
         images_ood = ood_data["images"]
-        metrics = evaluate_ood(preds_id, preds_ood)
+        lm_ood = torch.from_numpy(ood_data["logit_mean"]) if "logit_mean" in ood_data else None
+        lv_ood = torch.from_numpy(ood_data["logit_var"]) if "logit_var" in ood_data else None
+        ood_scores = per_sample_scores(preds_ood, lm_ood, lv_ood)
+        metrics = ood_metrics_from_scores(id_scores, ood_scores)
         all_metrics[ood_name] = metrics
 
         score_results = {}
-        for name, fn in SCORE_FNS.items():
-            id_s = fn(preds_id).cpu().numpy()
-            ood_s = fn(preds_ood).cpu().numpy()
+        for name in metrics:  # already excludes N/A scores
+            id_s = id_scores[name].cpu().numpy()
+            ood_s = ood_scores[name].cpu().numpy()
             auroc = float(metrics[name]["auroc"])
             p = fig_dir / f"hist_{ood_name}_{name}"
             plot_uncertainty_histogram(id_s, ood_s, name, ood_name, auroc, p)
@@ -111,6 +123,15 @@ def _regen_ood_plots(run_dir: Path, scenario_dir: Path, run_cfg) -> list[Path]:
         roc_path = fig_dir / f"roc_{ood_name}"
         plot_roc_curves(score_results, ood_name, roc_path)
         written.append(roc_path.with_suffix(".png"))
+
+        # AUROC bars grouped by conceptual family.
+        cat_path = fig_dir / f"auroc_by_category_{ood_name}"
+        plot_score_category_bar_chart(
+            {name: m["auroc"] for name, m in metrics.items()},
+            SCORE_CATEGORIES, cat_path,
+            title=f"OOD-detection AUROC by score family — ID vs {ood_name}",
+        )
+        written.append(cat_path.with_suffix(".png"))
 
         epis_id = mutual_information(preds_id).cpu().numpy()
         alea_id = expected_entropy(preds_id).cpu().numpy()
@@ -125,6 +146,23 @@ def _regen_ood_plots(run_dir: Path, scenario_dir: Path, run_cfg) -> list[Path]:
             save_path=scatter_path, ood_name=ood_name,
         )
         written.append(scatter_path.with_suffix(".png"))
+
+        # MI vs logit-variance scatter (Laplace only).
+        if id_scores.get("logit_variance_sum") is not None:
+            mi_all = np.concatenate([epis_id, epis_ood])
+            lv_all = np.concatenate([
+                id_scores["logit_variance_sum"].cpu().numpy(),
+                ood_scores["logit_variance_sum"].cpu().numpy(),
+            ])
+            is_ood = np.concatenate([np.zeros_like(epis_id, dtype=bool),
+                                     np.ones_like(epis_ood, dtype=bool)])
+            mivlv_path = fig_dir / f"mi_vs_logitvar_{ood_name}"
+            plot_score_correlation_scatter(
+                mi_all, lv_all, is_ood, mivlv_path,
+                x_label="Mutual Information", y_label="Logit Variance (sum)",
+                title=f"MI vs Logit Variance — ID vs {ood_name}",
+            )
+            written.append(mivlv_path.with_suffix(".png"))
 
         msp_ood = preds_ood.mean(dim=0).max(dim=-1).values.cpu().numpy()
         conf_path = fig_dir / f"ood_confidence_{ood_name}"

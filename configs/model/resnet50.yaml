@@ -1,0 +1,11 @@
+# Pre-trained ResNet-50 (torchvision), fine-tuned on MedMNIST.
+# Same code path as resnet18; used only when compute/time allow —
+# see docs/architecture_choice.md.
+name: pretrained_resnet50
+weights: imagenet            # imagenet | random | <path-to-checkpoint>
+freeze_backbone: false       # true = linear probing (train fc only)
+num_classes: ???             # resolved from the data config at train time
+# The classifier head is named `fc` (torchvision default) so last-layer Laplace
+# targets it unchanged. Input expectations are asserted against the data loader.
+input_channels: 3
+input_resolution: 224

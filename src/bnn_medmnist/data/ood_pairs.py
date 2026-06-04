@@ -71,6 +71,7 @@ def _external_ood_loader(
     batch_size: int,
     num_workers: int,
     data_root: str,
+    image_transform_cfg=None,
 ) -> DataLoader:
     """Build a test loader for an external MedMNIST dataset, adapting channels.
 
@@ -80,6 +81,12 @@ def _external_ood_loader(
     This is a known confound — it means we score the model on inputs that have
     been pushed through a non-trivial preprocessing step that ID inputs do not
     see. Flagged in the report.
+
+    When ``image_transform_cfg`` is provided (e.g. the ImageNet-style pipeline
+    for the pretrained ResNet-18), the *same* transform builder is used as for
+    the ID loader, so ID and OOD tensors share resolution / channels /
+    normalization. The transform's ``expand_channels_to`` handles channel
+    adaptation in that case.
     """
     import os
     from pathlib import Path
@@ -91,26 +98,30 @@ def _external_ood_loader(
     n_src_channels = int(info["n_channels"])
     DataClass = getattr(medmnist, info["python_class"])
 
-    ops: list = []
-    # MedMNIST yields PIL images — convert channels before ToTensor.
-    if n_src_channels != target_channels:
-        if target_channels == 1 and n_src_channels == 3:
-            ops.append(transforms.Grayscale(num_output_channels=1))
-        elif target_channels == 3 and n_src_channels == 1:
-            ops += [transforms.ToTensor(),
-                    transforms.Lambda(lambda x: x.repeat(3, 1, 1))]
-        else:
-            raise ValueError(
-                f"unsupported channel adaptation {n_src_channels} -> {target_channels}"
-            )
-    if not any(isinstance(op, transforms.ToTensor) for op in ops):
-        ops.append(transforms.ToTensor())
-    mean = [0.5] * target_channels
-    std = [0.5] * target_channels
-    ops.append(transforms.Normalize(mean, std))
-    tfm = transforms.Compose(ops)
+    from .medmnist_loader import PACKAGE_ROOT, _squeeze_target, build_image_transform
 
-    from .medmnist_loader import PACKAGE_ROOT, _squeeze_target
+    if image_transform_cfg is not None:
+        # Shared ImageNet-style pipeline (resize / channel-expand / normalize).
+        tfm = build_image_transform(n_src_channels, image_transform_cfg)
+    else:
+        # Legacy [-1, 1] pipeline with explicit channel adaptation to the model.
+        ops: list = []
+        if n_src_channels != target_channels:
+            if target_channels == 1 and n_src_channels == 3:
+                ops.append(transforms.Grayscale(num_output_channels=1))
+            elif target_channels == 3 and n_src_channels == 1:
+                ops += [transforms.ToTensor(),
+                        transforms.Lambda(lambda x: x.repeat(3, 1, 1))]
+            else:
+                raise ValueError(
+                    f"unsupported channel adaptation {n_src_channels} -> {target_channels}"
+                )
+        if not any(isinstance(op, transforms.ToTensor) for op in ops):
+            ops.append(transforms.ToTensor())
+        mean = [0.5] * target_channels
+        std = [0.5] * target_channels
+        ops.append(transforms.Normalize(mean, std))
+        tfm = transforms.Compose(ops)
 
     root = Path(os.path.expanduser(str(data_root)))
     if not root.is_absolute():
@@ -141,6 +152,7 @@ def build_ood_loaders(
     target channel count is known.
     """
     target_channels = id_loader.metadata.in_channels
+    image_transform_cfg = id_loader.image_transform_cfg
 
     if ood_pair.scenario in ("far_ood", "near_ood"):
         id_test = id_loader.test_loader()
@@ -149,7 +161,7 @@ def build_ood_loaders(
             ood_loaders[flag] = _external_ood_loader(
                 flag, target_channels=target_channels,
                 batch_size=batch_size, num_workers=num_workers,
-                data_root=data_root,
+                data_root=data_root, image_transform_cfg=image_transform_cfg,
             )
         return id_test, ood_loaders
 

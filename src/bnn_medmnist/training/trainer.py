@@ -29,6 +29,8 @@ class Trainer:
         self.log_dir = str(log_dir) if log_dir is not None else None
         self.ckpt_path = str(ckpt_path) if ckpt_path is not None else None
         self.class_weights = class_weights
+        # Optional mixed precision (CUDA only); opt-in via the training config.
+        self.use_amp = bool(getattr(self.cfg, "use_amp", False)) and self.device.startswith("cuda")
 
     def _build_optimizer(self, model: nn.Module) -> torch.optim.Optimizer:
         name = str(getattr(self.cfg, "optimizer", "adam")).lower()
@@ -54,6 +56,9 @@ class Trainer:
         epochs = int(self.cfg.epochs)
         patience = int(getattr(self.cfg, "early_stopping_patience", 0))
         writer = SummaryWriter(self.log_dir) if self.log_dir else None
+        scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        if self.use_amp:
+            print("mixed precision (AMP) enabled", flush=True)
 
         best_val = float("inf")
         best_state: dict | None = None
@@ -66,10 +71,12 @@ class Trainer:
                 x = x.to(self.device, non_blocking=True)
                 y = y.to(self.device, non_blocking=True).long()
                 opt.zero_grad()
-                logits = model(x)
-                loss = criterion(logits, y)
-                loss.backward()
-                opt.step()
+                with torch.autocast(device_type="cuda", enabled=self.use_amp):
+                    logits = model(x)
+                    loss = criterion(logits, y)
+                scaler.scale(loss).backward()
+                scaler.step(opt)
+                scaler.update()
                 running += loss.item() * x.size(0)
                 n += x.size(0)
             train_loss = running / max(n, 1)
