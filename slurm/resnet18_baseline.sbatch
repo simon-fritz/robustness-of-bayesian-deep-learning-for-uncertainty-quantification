@@ -10,8 +10,11 @@
 #SBATCH --mem=16G
 set -e
 
-source /meta/opt/anaconda3/etc/profile.d/conda.sh
-conda activate bnn
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
+python -m pip install --user -e .
 
 CFG=configs/experiment/pneumonia_resnet18_baseline.yaml
 python scripts/train.py --config "$CFG"

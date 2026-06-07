@@ -10,7 +10,13 @@
 #SBATCH --mem=16G                                          # host RAM
 
 ml python/anaconda3
-conda deactivate
-conda activate TODO-env-name
+set -e
 
-python scripts/evaluate.py --config configs/experiment/training/pneumonia_lll.yaml
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
+python -m pip install --user -e .
+
+RUN_DIR=$(ls -td outputs/pneumonia_lll/*/ | head -1)
+python scripts/evaluate_ood.py --run-dir "$RUN_DIR" --ood-config configs/experiment/ood/pneumonia_near_organ.yaml
