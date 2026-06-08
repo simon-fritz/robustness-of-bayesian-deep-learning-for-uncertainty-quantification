@@ -30,6 +30,7 @@ from .uncertainty import (
     logit_variance,
     mutual_information,
     predictive_entropy,
+    softmax_predictive_quantile_range,
     softmax_predictive_variance,
 )
 
@@ -89,6 +90,8 @@ SCORE_CATEGORIES: dict[str, list[str]] = {
     "Statistical spread (MC samples)": [
         "softmax_variance_sum",
         "softmax_variance_max",
+        "softmax_quantile_range_sum",
+        "softmax_quantile_range_max",
         "expected_pairwise_kl",
     ],
     "Analytical Gaussian spread (Laplace only)": [
@@ -119,6 +122,8 @@ SCORE_FNS: dict[str, Callable[[torch.Tensor], torch.Tensor]] = {
     "one_minus_max_softmax": one_minus_max_softmax,
     "softmax_variance_sum": lambda p: softmax_predictive_variance(p, "sum"),
     "softmax_variance_max": lambda p: softmax_predictive_variance(p, "max"),
+    "softmax_quantile_range_sum": lambda p: softmax_predictive_quantile_range(p, aggregate="sum"),
+    "softmax_quantile_range_max": lambda p: softmax_predictive_quantile_range(p, aggregate="max"),
 }
 
 
@@ -157,6 +162,8 @@ def per_sample_scores(
         "expected_entropy": expected_entropy(p),
         "softmax_variance_sum": softmax_predictive_variance(p, "sum"),
         "softmax_variance_max": softmax_predictive_variance(p, "max"),
+        "softmax_quantile_range_sum": softmax_predictive_quantile_range(p, aggregate="sum"),
+        "softmax_quantile_range_max": softmax_predictive_quantile_range(p, aggregate="max"),
         "expected_pairwise_kl": expected_pairwise_kl(p, min_samples=min_kl_samples),
         "logit_variance_sum": logit_variance(logit_pair, "sum") if has_logits else None,
         "logit_variance_max": logit_variance(logit_pair, "max") if has_logits else None,
