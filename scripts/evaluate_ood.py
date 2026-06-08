@@ -102,6 +102,9 @@ def _collect(model, loader, device, *, method_name: str, predictor=None, n_sampl
             p = res["softmax_samples"].cpu()
             all_lm.append(res["logit_mean"].cpu())
             all_lv.append(res["logit_var"].cpu())
+        elif method_name == "deep_ensemble":
+            batch_probs = [torch.softmax(m(x.to(device)), dim=-1).cpu() for m in model]
+            p = torch.stack(batch_probs, dim=0)
         else:
             raise NotImplementedError(f"method '{method_name}' not supported")
         all_p.append(p)
@@ -325,10 +328,18 @@ def main() -> None:
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     id_loader = MedMNISTLoader(run_cfg.data)
-    model = _load_model(
-        run_cfg, ckpt_path, device,
-        id_loader.metadata.num_classes, id_loader.metadata.in_channels,
-    )
+    
+    if method_name == "deep_ensemble":
+        ckpt_dir = ckpt_path.parent
+        member_files = sorted(ckpt_dir.glob("member_*.pt"))
+        model = []
+        for f in member_files:
+            model.append(_load_model(run_cfg, f, device, id_loader.metadata.num_classes, id_loader.metadata.in_channels))
+    else:
+        model = _load_model(
+            run_cfg, ckpt_path, device,
+            id_loader.metadata.num_classes, id_loader.metadata.in_channels,
+        )
 
     predictor = None
     n_samples = int(args.n_samples or ood_cfg.get("n_predictive_samples", 100))
