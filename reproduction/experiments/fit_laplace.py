@@ -59,6 +59,7 @@ class LastLayerLaplace:
     def optimize_prior_precision(self, method='marglik'):
         best_score = float('inf')
         best_log_prior = 0.0
+        map_norm = (self.theta_map ** 2).sum().item()
 
         for log_prior in np.linspace(-4, 4, 40):
             prior = float(np.exp(log_prior))
@@ -66,7 +67,7 @@ class LastLayerLaplace:
             sign, log_det = torch.linalg.slogdet(H)
             if sign <= 0:
                 continue
-            score = 0.5 * log_det.item() - 0.5 * self.n_params * log_prior
+            score = 0.5 * log_det.item() - 0.5 * self.n_params * log_prior + 0.5 * prior * map_norm
             if score < best_score:
                 best_score = score
                 best_log_prior = log_prior
