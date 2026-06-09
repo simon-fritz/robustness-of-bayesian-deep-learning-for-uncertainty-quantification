@@ -19,7 +19,7 @@ The Deep Ensemble provides an exceptionally strong baseline for in-distribution 
 
 The low Expected Calibration Error (ECE) demonstrates that the ensemble's predictive confidence closely matches its empirical accuracy. 
 
-![Deep Ensemble Calibration](../assets/reliability_diagram.png)
+![Deep Ensemble Calibration](../outputs/pneumonia_deep_ensemble/20260607_133223/figures/reliability_diagram.png)
 
 ---
 
@@ -47,14 +47,14 @@ The paper argues that standard confidence metrics (like Maximum Softmax Probabil
 * **Epistemic Superiority:** Mutual Information achieved an exceptional AUROC of **0.9612** (AUPRC: 0.9923, FPR@95: 0.2484).
 * **Failure Modes:** Standard confidence metrics lag significantly behind at 0.9195, confirming that individual models map distinct, multi-channel blood cell features confidently into the binary pneumonia/normal space.
 
-![BloodMNIST Failure Modes](../assets/failure_modes_bloodmnist.png)
+![BloodMNIST Failure Modes](../outputs/pneumonia_deep_ensemble/20260607_133223/ood/far_ood/figures/failure_modes_bloodmnist.png)
 
 ### Near-OOD: OrganAMNIST Evaluation
 * **Increased Difficulty:** Moving to Near-OOD data caused a performance degradation across all metrics. Because OrganAMNIST consists of grayscale, chest/abdominal structure slices, the inputs visually mimic the spatial composition of the ID PneumoniaMNIST X-rays.
 * **Standard Metrics Degrade:** First-order metrics dropped down to **0.8876**, indicating that individual supervised models frequently fall into the "wrong question" trap when alien data looks structurally similar to the training distribution.
 * **Epistemic Robustness:** Despite the challenging shift, `mutual_information` remained highly robust at **0.9366** (AUPRC: 0.9974, FPR@95: 0.3157). 
 
-![OrganAMNIST Failure Modes](../assets/failure_modes_organamnist.png)
+![OrganAMNIST Failure Modes](../outputs/pneumonia_deep_ensemble/20260607_133223/ood/near_ood/figures/failure_modes_organamnist.png)
 
 ---
 
