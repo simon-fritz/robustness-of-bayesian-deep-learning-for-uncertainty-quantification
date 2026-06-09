@@ -7,7 +7,7 @@
 #SBATCH --time=0-01:00:00                                  # walltime (lowered to 1hr for fast eval)
 #SBATCH --gres=gpu:1                                       # one GPU
 #SBATCH --cpus-per-task=8                                  # CPU cores for the job
-#SBATCH --mem=16G                                          # host RAM
+#SBATCH --mem=64G                                          # host RAM
 
 ml python/anaconda3
 set -e
