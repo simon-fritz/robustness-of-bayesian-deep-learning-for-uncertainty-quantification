@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=longtail_lll
-#SBATCH --output=logs/slurm/longtail_lll-%A.out
-#SBATCH --error=logs/slurm/longtail_lll-%A.err
+#SBATCH --job-name=longtail_rn18_lll
+#SBATCH --output=logs/slurm/longtail_rn18_lll-%A.out
+#SBATCH --error=logs/slurm/longtail_rn18_lll-%A.err
 #SBATCH --partition=universe,asteroids
 #SBATCH --qos=master-queuesave
 #SBATCH --time=0-04:00:00
@@ -17,10 +17,10 @@ cd "$REPO_ROOT"
 
 python -m pip install --user -e .
 
-CFG=configs/experiment/training/pneumonia_longtail_lll.yaml
+CFG=configs/experiment/pneumonia_resnet18_longtail_lll.yaml
 python scripts/train.py --config "$CFG"
 
-RUN_DIR=$(ls -td outputs/pneumonia_longtail_normal2pct_lll/*/ | head -1)
+RUN_DIR=$(ls -td outputs/pneumonia_resnet18_longtail_normal2pct_lll/*/ | head -1)
 echo "RUN_DIR=$RUN_DIR"
 
 python scripts/evaluate.py --run-dir "$RUN_DIR"

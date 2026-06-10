@@ -1,0 +1,34 @@
+# Experiment: Deterministic pre-trained ResNet-18 on PneumoniaMNIST with class 0
+# ("normal") heavily subsampled — long-tail counterpart to
+# pneumonia_resnet18_baseline for the long_tail OOD scenario.
+#   0 -> "normal"   (under-represented at training time)
+#   1 -> "pneumonia"
+defaults:
+  - /data: pneumoniamnist
+  - /model: resnet18
+  - /method: deterministic
+  - _self_
+
+experiment_name: pneumonia_resnet18_longtail_normal2pct_det
+run_name: pneumonia_resnet18_longtail_normal2pct_det
+seed: 42
+
+# ImageNet-style preprocessing required by the pretrained ResNet-18, plus the
+# long-tail class subsampling.
+data:
+  class_subsampling: {0: 0.02}  # keep 2% of "normal"
+  image_transform:
+    resize: 224
+    expand_channels_to: 3
+    normalize:
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+
+# Fine-tuning training choices: lower LR + fewer epochs than from-scratch SmallCNN.
+method:
+  lr: 1.0e-4
+  epochs: 15
+  use_amp: false        # opt-in CUDA mixed precision
+
+output_dir: outputs
+checkpoint_dir: checkpoints
