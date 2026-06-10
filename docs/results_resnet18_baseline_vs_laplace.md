@@ -2,7 +2,8 @@
 
 Run `20260603_125825`. Same ResNet-18, once deterministic (`baseline`) and once
 with last-layer Laplace (`lll`). In-distribution = PneumoniaMNIST, far-OOD =
-BloodMNIST. (Near-OOD not yet evaluated.)
+BloodMNIST (colour blood-cell microscopy), near-OOD = OrganAMNIST (grayscale
+abdominal CT slices — same modality family as a chest X-ray).
 
 ## Classification
 
@@ -28,20 +29,20 @@ Scores split into two conceptual orders (Hüllermeier & Waegeman 2021):
 
 ### First-order scores
 
-| Score | captures | baseline | lll |
-|---|---|---|---|
-| predictive_entropy | total | 0.618 | 0.810 |
-| one_minus_max_softmax | total / confidence | 0.618 | 0.810 |
-| expected_entropy | aleatoric | 0.618 | 0.722 |
+| Score | captures | base far | lll far | base near | lll near |
+|---|---|---|---|---|---|
+| predictive_entropy | total | 0.618 | 0.810 | 0.904 | 0.907 |
+| one_minus_max_softmax | total / confidence | 0.618 | 0.810 | 0.904 | 0.907 |
+| expected_entropy | aleatoric | 0.618 | 0.722 | 0.904 | 0.879 |
 
 ### Second-order scores (epistemic / posterior spread)
 
-| Score | captures | baseline | lll |
-|---|---|---|---|
-| mutual_information | epistemic (BALD) | 0.500 | 0.865 |
-| softmax_variance | spread (MC) | 0.500 | 0.837 |
-| expected_pairwise_kl | spread (MC) | — | 0.928 |
-| logit_variance | analytical Gaussian (Laplace only) | — | **0.956** |
+| Score | captures | base far | lll far | base near | lll near |
+|---|---|---|---|---|---|
+| mutual_information | epistemic (BALD) | 0.500 | 0.865 | 0.500 | 0.928 |
+| softmax_variance | spread (MC) | 0.500 | 0.837 | 0.500 | 0.924 |
+| expected_pairwise_kl | spread (MC) | — | 0.928 | — | **0.931** |
+| logit_variance | analytical Gaussian (Laplace only) | — | **0.956** | — | 0.774 |
 
 ## Three takeaways
 
@@ -55,15 +56,22 @@ Scores split into two conceptual orders (Hüllermeier & Waegeman 2021):
    and even first-order entropy improves (MC-averaging makes the mean softmax
    less overconfident).
 
-3. **Mutual information is not the best score.** The analytical Gaussian
-   logit-variance (Laplace-only, sampling-free) wins at 0.956 (FPR@95 ≈ 0.10),
-   ahead of expected pairwise KL (0.928) and well ahead of MI (0.865). This is
-   why we compare several score *families* instead of relying on entropy/MI
-   alone (Hüllermeier & Waegeman 2021).
+3. **No single score wins everywhere — the best one flips with the OOD type.**
+   On far-OOD the analytical Gaussian `logit_variance` is best (0.956), but on
+   near-OOD it is the *worst* Laplace score (0.774). The robust scores across
+   both are `mutual_information` (0.865 / 0.928) and `expected_pairwise_kl`
+   (0.928 / 0.931). This is exactly why we compare several score *families*
+   instead of trusting one (Hüllermeier & Waegeman 2021): a score tuned on
+   far-OOD can mislead on near-OOD.
 
-## Caveat
+## Caveats
 
-Far-OOD (BloodMNIST) is the easy case — it looks nothing like a chest X-ray. The
-harder near-OOD evaluation is still missing, and that is where epistemic
-uncertainty as an OOD detector is actually tested (cf. Li et al. 2025).
+- **Far vs. near behave differently.** Far-OOD (BloodMNIST, colour) is visually
+  obvious, yet near-OOD (OrganAMNIST, grayscale) is actually *easier* for plain
+  first-order confidence (entropy 0.90 vs 0.62) — even the deterministic model
+  separates it well. The Bayesian second-order scores mainly help on far-OOD and
+  on the harder-to-summarise cases; on near-OOD the gap to first-order is small.
+- **Only one dataset per OOD type.** One far- and one near-OOD set is thin
+  evidence; conclusions about *which* score to trust need more OOD datasets and
+  multiple seeds before they generalise (cf. Li et al. 2025).
 </content>
