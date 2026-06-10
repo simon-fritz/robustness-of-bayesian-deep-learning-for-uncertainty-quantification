@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -132,7 +133,17 @@ def main() -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     OmegaConf.save(cfg, run_dir / "config.yaml")
 
-    tb_dir = PACKAGE_ROOT / "logs" / "tensorboard" / f"{run_name}_{timestamp}"
+    # TensorBoard logs default to the repo's logs/ dir, but that may sit on a
+    # shared network mount that throws OSError on append. TENSORBOARD_DIR lets a
+    # SLURM job redirect them to node-local scratch ($TMPDIR), or disable them
+    # entirely with TENSORBOARD_DIR=off / "" / none.
+    tb_env = os.environ.get("TENSORBOARD_DIR")
+    if tb_env is None:
+        tb_dir = PACKAGE_ROOT / "logs" / "tensorboard" / f"{run_name}_{timestamp}"
+    elif tb_env.strip().lower() in ("", "off", "none"):
+        tb_dir = None
+    else:
+        tb_dir = Path(tb_env) / f"{run_name}_{timestamp}"
     ckpt_path = PACKAGE_ROOT / "checkpoints" / run_name / timestamp / "best.pt"
 
     log_run_start(

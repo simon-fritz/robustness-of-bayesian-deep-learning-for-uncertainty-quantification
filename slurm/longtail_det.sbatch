@@ -13,6 +13,9 @@ set -e
 ml python/anaconda3
 cd "$SLURM_SUBMIT_DIR"
 
+# Avoid TensorBoard event writes on the shared network mount (Errno 5 / EIO).
+export TENSORBOARD_DIR=off
+
 CFG=configs/experiment/pneumonia_resnet18_longtail_baseline.yaml
 python scripts/train.py --config "$CFG"
 

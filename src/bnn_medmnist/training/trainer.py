@@ -91,9 +91,20 @@ class Trainer:
             print(msg, flush=True)
 
             if writer is not None:
-                writer.add_scalar("train/loss", train_loss, epoch)
-                for k, v in val_metrics.items():
-                    writer.add_scalar(f"val/{k}", v, epoch)
+                # TensorBoard event files live on a shared network mount that can
+                # raise transient OSError (Errno 5) on append. A logging hiccup
+                # must never abort training: drop the writer and carry on.
+                try:
+                    writer.add_scalar("train/loss", train_loss, epoch)
+                    for k, v in val_metrics.items():
+                        writer.add_scalar(f"val/{k}", v, epoch)
+                except OSError as exc:
+                    print(f"[trainer] tensorboard logging disabled after I/O error: {exc}", flush=True)
+                    try:
+                        writer.close()
+                    except OSError:
+                        pass
+                    writer = None
 
             score = val_metrics.get("loss", train_loss)
             if score < best_val:
@@ -110,7 +121,10 @@ class Trainer:
                     break
 
         if writer is not None:
-            writer.close()
+            try:
+                writer.close()
+            except OSError:
+                pass
         if best_state is not None:
             model.load_state_dict(best_state)
         return model
