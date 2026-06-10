@@ -1,0 +1,34 @@
+{
+  "organamnist": {
+    "predictive_entropy": {
+      "auroc": 0.6722227270236045,
+      "auprc": 0.9787359771202649,
+      "fpr_at_95_tpr": 0.8685897435897436
+    },
+    "one_minus_max_softmax": {
+      "auroc": 0.6722225918089486,
+      "auprc": 0.978735739801866,
+      "fpr_at_95_tpr": 0.8685897435897436
+    },
+    "mutual_information": {
+      "auroc": 0.5,
+      "auprc": 0.9660906423214868,
+      "fpr_at_95_tpr": 1.0
+    },
+    "expected_entropy": {
+      "auroc": 0.6722227270236045,
+      "auprc": 0.9787359771202649,
+      "fpr_at_95_tpr": 0.8685897435897436
+    },
+    "softmax_variance_sum": {
+      "auroc": 0.5,
+      "auprc": 0.9660906423214868,
+      "fpr_at_95_tpr": 1.0
+    },
+    "softmax_variance_max": {
+      "auroc": 0.5,
+      "auprc": 0.9660906423214868,
+      "fpr_at_95_tpr": 1.0
+    }
+  }
+}
