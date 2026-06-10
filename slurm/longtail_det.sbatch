@@ -13,8 +13,6 @@ set -e
 ml python/anaconda3
 cd "$SLURM_SUBMIT_DIR"
 
-python -m pip install --user -e .
-
 CFG=configs/experiment/pneumonia_resnet18_longtail_baseline.yaml
 python scripts/train.py --config "$CFG"
 
