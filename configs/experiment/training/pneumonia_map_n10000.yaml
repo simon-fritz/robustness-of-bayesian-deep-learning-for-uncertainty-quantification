@@ -1,0 +1,15 @@
+defaults:
+  - /data: pneumoniamnist
+  - /model: small_cnn
+  - /method: deterministic
+  - _self_
+
+experiment_name: pneumonia_map_n10000
+run_name: pneumonia_map_n10000
+seed: 42
+
+data:
+  train_size: 10000
+
+output_dir: outputs
+checkpoint_dir: checkpoints

@@ -186,6 +186,31 @@ class LastLayerLaplace(BayesianMethod):
             out["logit_sigma"] = out["logit_var"].clamp_min(0).sqrt()
         return out
 
+    def sigma_summary(self, train_size: int | None = None) -> dict:
+        """Summary statistics of the posterior covariance for the last layer.
+
+        Returns mean/max of diagonal(Σ) and Frobenius norm of Σ — metrics that
+        should shrink monotonically as training size grows (posterior collapse
+        signal). Saved to ``sigma_summary.json`` in the run directory by
+        ``scripts/train.py``.
+        """
+        if self.la is None:
+            raise RuntimeError("fit must be called before sigma_summary.")
+        diag = self.la.posterior_variance.detach().cpu()
+        result: dict = {
+            "mean_sigma": float(diag.mean()),
+            "max_sigma": float(diag.max()),
+        }
+        try:
+            cov = self.la.posterior_covariance.detach().cpu()
+            result["sigma_norm"] = float(torch.norm(cov, p="fro"))
+        except Exception:
+            # Fall back to diagonal norm if full covariance unavailable.
+            result["sigma_norm"] = float(torch.norm(diag))
+        if train_size is not None:
+            result["train_size"] = int(train_size)
+        return result
+
     @torch.no_grad()
     def predict(self, x: torch.Tensor, n_samples: int | None = None) -> torch.Tensor:
         return self.predictive_samples(x, n_samples).mean(dim=0)

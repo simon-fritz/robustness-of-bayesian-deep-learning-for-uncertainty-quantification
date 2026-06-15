@@ -213,11 +213,33 @@ class MedMNISTLoader(BaseDataset):
                 drop_idx = rng.choice(cls_idx, size=len(cls_idx) - n_keep, replace=False)
                 keep[drop_idx] = False
         indices = np.where(keep)[0]
-        if cap_size and len(indices) > cap_size:
-            # Separate rng (offset seed) so the size cap doesn't perturb the
-            # class-subsampling draw above when both knobs are combined.
-            rng = np.random.default_rng(seed + 10_000)
-            indices = rng.choice(indices, size=cap_size, replace=False)
+        if cap_size:
+            if len(indices) <= cap_size:
+                import warnings
+                warnings.warn(
+                    f"train_size={cap_size} >= available training data "
+                    f"({len(indices)} samples after filters). No capping applied.",
+                    UserWarning, stacklevel=4,
+                )
+            else:
+                # Stratified subsample: preserve per-class proportions via
+                # largest-remainder rounding so class balance is maintained.
+                rng = np.random.default_rng(seed + 10_000)
+                labels_kept = labels[indices]
+                classes = np.unique(labels_kept)
+                counts = np.array([int(np.sum(labels_kept == c)) for c in classes])
+                total = len(indices)
+                raw = counts * cap_size / total
+                n_per_class = np.floor(raw).astype(int)
+                remainder = cap_size - int(n_per_class.sum())
+                top = np.argsort(-(raw - n_per_class))[:remainder]
+                n_per_class[top] += 1
+                selected: list[int] = []
+                for cls, n in zip(classes, n_per_class):
+                    cls_idx = indices[labels_kept == cls]
+                    chosen = rng.choice(cls_idx, size=min(int(n), len(cls_idx)), replace=False)
+                    selected.extend(chosen.tolist())
+                indices = np.array(selected)
         return Subset(ds, indices.tolist())
 
     def _per_class_counts(self, ds) -> dict[int, int]:
