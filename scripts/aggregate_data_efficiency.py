@@ -25,20 +25,24 @@ import pandas as pd
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 
 RUN_PATTERNS = [
-    ("lll", "pneumonia_lll_n100",   100),
-    ("lll", "pneumonia_lll_n1000",  1000),
-    ("lll", "pneumonia_lll_n10000", 10000),
-    ("map", "pneumonia_map_n100",   100),
-    ("map", "pneumonia_map_n1000",  1000),
-    ("map", "pneumonia_map_n10000", 10000),
+    ("lll",      "pneumonia_lll_n100",      100),
+    ("lll",      "pneumonia_lll_n1000",     1000),
+    ("lll",      "pneumonia_lll_n10000",    10000),
+    ("map",      "pneumonia_map_n100",      100),
+    ("map",      "pneumonia_map_n1000",     1000),
+    ("map",      "pneumonia_map_n10000",    10000),
+    ("ensemble", "pneumonia_ensemble_n100",  100),
+    ("ensemble", "pneumonia_ensemble_n1000", 1000),
+    ("ensemble", "pneumonia_ensemble_n10000",10000),
 ]
 
 FAR_OOD_DATASET  = "bloodmnist"
 NEAR_OOD_DATASET = "organamnist"
 
-SCORES_LLL = ["mutual_information", "logit_variance_sum", "expected_pairwise_kl",
-               "softmax_variance_sum"]
-SCORES_MAP = ["predictive_entropy", "one_minus_max_softmax"]
+SCORES_LLL      = ["mutual_information", "logit_variance_sum", "expected_pairwise_kl",
+                   "softmax_variance_sum"]
+SCORES_MAP      = ["predictive_entropy", "one_minus_max_softmax"]
+SCORES_ENSEMBLE = ["mutual_information", "expected_pairwise_kl", "softmax_variance_sum"]
 
 
 def _latest_run(outputs_dir: Path, run_name: str) -> Path | None:
@@ -78,7 +82,7 @@ def build_table(outputs_dir: Path) -> pd.DataFrame:
 
         row: dict = {"method": method, "run_name": run_name, "train_size": train_size}
 
-        scores = SCORES_LLL if method == "lll" else SCORES_MAP
+        scores = {"lll": SCORES_LLL, "map": SCORES_MAP, "ensemble": SCORES_ENSEMBLE}[method]
         for score in scores:
             row[f"far_ood_{score}"]  = _read_ood_auroc(run_dir, "far_ood",  FAR_OOD_DATASET,  score)
             row[f"near_ood_{score}"] = _read_ood_auroc(run_dir, "near_ood", NEAR_OOD_DATASET, score)
@@ -115,6 +119,11 @@ def plot_auroc(df: pd.DataFrame, out_dir: Path) -> None:
                     ("mutual_information",   "LLL — Mutual Information"),
                     ("logit_variance_sum",   "LLL — Logit Variance"),
                     ("expected_pairwise_kl", "LLL — Exp. Pairwise KL"),
+                ]
+            elif method == "ensemble":
+                plot_scores = [
+                    ("mutual_information",   "Ensemble — Mutual Information"),
+                    ("expected_pairwise_kl", "Ensemble — Exp. Pairwise KL"),
                 ]
             else:
                 plot_scores = [
