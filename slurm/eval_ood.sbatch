@@ -14,8 +14,6 @@ set -e
 
 cd $SLURM_SUBMIT_DIR
 
-python -m pip install --user -e .
-
 # Grab the first and second arguments passed to sbatch
 RUN_DIR=$1
 # Default to far_blood if no second argument is provided

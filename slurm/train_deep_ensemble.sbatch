@@ -1,19 +1,18 @@
 #!/bin/bash
-#SBATCH --job-name=train_deep_ensemble                     # job name shown in squeue
-#SBATCH --output=logs/slurm/train_deep_ensemble-%A.out     # stdout, %A = job id
-#SBATCH --error=logs/slurm/train_deep_ensemble-%A.err      # stderr
-#SBATCH --partition=universe,asteroids                     # cluster partitions
-#SBATCH --qos=master-queuesave                             # default QoS
-#SBATCH --time=0-04:00:00                                  # walltime D-HH:MM:SS
-#SBATCH --gres=gpu:1                                       # one GPU
-#SBATCH --cpus-per-task=8                                  # CPU cores for the job
-#SBATCH --mem=16G                                          # host RAM
+#SBATCH --job-name=train_deep_ensemble
+#SBATCH --output=logs/slurm/train_deep_ensemble-%A.out
+#SBATCH --error=logs/slurm/train_deep_ensemble-%A.err
+#SBATCH --partition=universe,asteroids
+#SBATCH --qos=master-queuesave
+#SBATCH --time=0-04:00:00
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
+set -e
 
 ml python/anaconda3
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-cd "$REPO_ROOT"
+cd "$SLURM_SUBMIT_DIR"
 
-python -m pip install --user -e .
+export TENSORBOARD_DIR=off
 
 python scripts/train.py --config configs/experiment/training/pneumonia_deep_ensemble.yaml

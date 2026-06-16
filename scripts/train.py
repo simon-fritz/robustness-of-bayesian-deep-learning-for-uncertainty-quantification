@@ -107,7 +107,7 @@ def _build_method(cfg, data, ckpt_path: Path, tb_dir: Path):
         n_members = int(cfg.method.get("n_members", 5))
         return DeepEnsemble(
             train_cfg=train_cfg, ckpt_path=ckpt_path, log_dir=tb_dir, 
-            class_weights=class_weights, n_members=n_members
+            class_weights=class_weights, n_members=n_members, base_seed=int(cfg.seed)
         )
     raise NotImplementedError(f"method '{name}' is not wired up.")
 
@@ -161,7 +161,12 @@ def main() -> None:
         num_classes=data.metadata.num_classes,
     )
     method = _build_method(cfg, data, ckpt_path, tb_dir)
-    method.fit(model, data.train_loader(), data.val_loader())
+    
+    name = str(cfg.method.get("name", "deterministic")).lower()
+    if name == "deep_ensemble":
+        method.fit(model, data)
+    else:
+        method.fit(model, data.train_loader(), data.val_loader())
 
     (run_dir / "checkpoint_path.txt").write_text(str(ckpt_path))
     print(f"checkpoint saved to {ckpt_path}")
