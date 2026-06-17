@@ -42,7 +42,10 @@ NEAR_OOD_DATASET = "organamnist"
 SCORES_LLL      = ["mutual_information", "logit_variance_sum", "expected_pairwise_kl",
                    "softmax_variance_sum"]
 SCORES_MAP      = ["predictive_entropy", "one_minus_max_softmax"]
-SCORES_ENSEMBLE = ["mutual_information", "expected_pairwise_kl", "softmax_variance_sum"]
+SCORES_ENSEMBLE = ["mutual_information", "softmax_variance_sum"]
+# Note: expected_pairwise_kl requires >=10 MC samples; ensemble default
+# n_members=5, so this score is always None for ensemble runs and excluded
+# from ood_metrics.json entirely.
 
 
 def _latest_run(outputs_dir: Path, run_name: str) -> Path | None:
@@ -122,8 +125,8 @@ def plot_auroc(df: pd.DataFrame, out_dir: Path) -> None:
                 ]
             elif method == "ensemble":
                 plot_scores = [
-                    ("mutual_information",   "Ensemble — Mutual Information"),
-                    ("expected_pairwise_kl", "Ensemble — Exp. Pairwise KL"),
+                    ("mutual_information",    "Ensemble — Mutual Information"),
+                    ("softmax_variance_sum",  "Ensemble — Softmax Variance"),
                 ]
             else:
                 plot_scores = [
