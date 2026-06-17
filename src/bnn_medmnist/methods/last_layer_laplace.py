@@ -196,17 +196,16 @@ class LastLayerLaplace(BayesianMethod):
         """
         if self.la is None:
             raise RuntimeError("fit must be called before sigma_summary.")
-        diag = self.la.posterior_variance.detach().cpu()
+        cov = self.la.posterior_covariance
+        if not torch.is_tensor(cov):
+            cov = torch.as_tensor(cov)
+        cov = cov.detach().cpu()
+        diag = torch.diagonal(cov)
         result: dict = {
             "mean_sigma": float(diag.mean()),
             "max_sigma": float(diag.max()),
+            "sigma_norm": float(torch.norm(cov, p="fro")),
         }
-        try:
-            cov = self.la.posterior_covariance.detach().cpu()
-            result["sigma_norm"] = float(torch.norm(cov, p="fro"))
-        except Exception:
-            # Fall back to diagonal norm if full covariance unavailable.
-            result["sigma_norm"] = float(torch.norm(diag))
         if train_size is not None:
             result["train_size"] = int(train_size)
         return result
