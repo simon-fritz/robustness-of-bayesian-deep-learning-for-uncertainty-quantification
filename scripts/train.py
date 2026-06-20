@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -107,7 +108,7 @@ def _build_method(cfg, data, ckpt_path: Path, tb_dir: Path):
         n_members = int(cfg.method.get("n_members", 5))
         return DeepEnsemble(
             train_cfg=train_cfg, ckpt_path=ckpt_path, log_dir=tb_dir, 
-            class_weights=class_weights, n_members=n_members
+            class_weights=class_weights, n_members=n_members, base_seed=int(cfg.seed)
         )
     raise NotImplementedError(f"method '{name}' is not wired up.")
 
@@ -133,7 +134,17 @@ def main() -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     OmegaConf.save(cfg, run_dir / "config.yaml")
 
-    tb_dir = PACKAGE_ROOT / "logs" / "tensorboard" / f"{run_name}_{timestamp}"
+    # TensorBoard logs default to the repo's logs/ dir, but that may sit on a
+    # shared network mount that throws OSError on append. TENSORBOARD_DIR lets a
+    # SLURM job redirect them to node-local scratch ($TMPDIR), or disable them
+    # entirely with TENSORBOARD_DIR=off / "" / none.
+    tb_env = os.environ.get("TENSORBOARD_DIR")
+    if tb_env is None:
+        tb_dir = PACKAGE_ROOT / "logs" / "tensorboard" / f"{run_name}_{timestamp}"
+    elif tb_env.strip().lower() in ("", "off", "none"):
+        tb_dir = None
+    else:
+        tb_dir = Path(tb_env) / f"{run_name}_{timestamp}"
     ckpt_path = PACKAGE_ROOT / "checkpoints" / run_name / timestamp / "best.pt"
 
     log_run_start(
@@ -151,7 +162,12 @@ def main() -> None:
         num_classes=data.metadata.num_classes,
     )
     method = _build_method(cfg, data, ckpt_path, tb_dir)
-    method.fit(model, data.train_loader(), data.val_loader())
+    
+    name = str(cfg.method.get("name", "deterministic")).lower()
+    if name == "deep_ensemble":
+        method.fit(model, data)
+    else:
+        method.fit(model, data.train_loader(), data.val_loader())
 
     (run_dir / "checkpoint_path.txt").write_text(str(ckpt_path))
     print(f"checkpoint saved to {ckpt_path}")

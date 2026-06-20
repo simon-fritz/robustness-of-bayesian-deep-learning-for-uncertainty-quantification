@@ -23,7 +23,9 @@ from bnn_medmnist.evaluation.metrics import (
     accuracy,
     auroc,
     balanced_accuracy,
+    brier_score,
     expected_calibration_error,
+    nll,
 )
 from bnn_medmnist.evaluation.plots import plot_reliability_diagram
 from bnn_medmnist.evaluation.uncertainty import (
@@ -100,6 +102,43 @@ def _deep_ensemble_samples(members, loader, device) -> tuple[torch.Tensor, torch
     
     return torch.cat(all_p, dim=1), torch.cat(all_y)
 
+# Pretty labels + "better" direction for the printed overview. Anything not
+# listed falls back to its raw key with no arrow.
+_METRIC_META: dict[str, tuple[str, str]] = {
+    "accuracy": ("accuracy", "↑"),
+    "balanced_accuracy": ("balanced accuracy", "↑"),
+    "auroc": ("AUROC", "↑"),
+    "ece": ("ECE (calibration error)", "↓"),
+    "nll": ("NLL (-log p of true label)", "↓"),
+    "brier": ("Brier score", "↓"),
+    "mean_predictive_entropy": ("predictive entropy (total)", " "),
+    "mean_expected_entropy": ("expected entropy (aleatoric)", " "),
+    "mean_mutual_information": ("mutual information (epistemic)", " "),
+    "max_mutual_information": ("max mutual information", " "),
+}
+
+
+def _print_metrics(
+    method_name: str,
+    n_samples: int,
+    metrics: dict[str, float],
+    groups: list[tuple[str, list[str]]],
+) -> None:
+    """Print metrics grouped into labelled sections with a direction hint."""
+    label_w = max(len(_METRIC_META.get(k, (k, ""))[0]) for k in metrics)
+    header = f" Test metrics — {method_name} "
+    bar = "═" * max(len(header), label_w + 14)
+    print(f"\n{bar}\n{header}\n{bar}")
+    for title, keys in groups:
+        print(f"\n{title}")
+        for k in keys:
+            if k not in metrics:
+                continue
+            label, arrow = _METRIC_META.get(k, (k, " "))
+            print(f"  {arrow} {label:<{label_w}}  {metrics[k]:>8.4f}")
+    print(f"\n{bar}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate a trained model on the test split.")
     parser.add_argument("--run-dir", required=True)
@@ -169,12 +208,20 @@ def main() -> None:
 
     mean_probs = probs_samples.mean(dim=0)
 
+    # Metrics grouped by what they tell you. The dict written to JSON stays flat
+    # (one key per metric); ``groups`` only drives the printed overview.
     metrics: dict[str, float] = {
         "accuracy": accuracy(y, mean_probs),
         "balanced_accuracy": balanced_accuracy(y, mean_probs),
         "auroc": auroc(y, mean_probs),
         "ece": expected_calibration_error(y, mean_probs),
+        "nll": nll(y, mean_probs),
+        "brier": brier_score(y, mean_probs),
     }
+    groups: list[tuple[str, list[str]]] = [
+        ("Classification", ["accuracy", "balanced_accuracy", "auroc"]),
+        ("Calibration / proper scores", ["ece", "nll", "brier"]),
+    ]
 
     if probs_samples.shape[0] > 1:
         pe = predictive_entropy(probs_samples)
@@ -186,12 +233,17 @@ def main() -> None:
             "mean_mutual_information": float(mi.mean()),
             "max_mutual_information": float(mi.max()),
         })
+        groups.append((
+            f"Uncertainty (mean over test set, {probs_samples.shape[0]} samples)",
+            [
+                "mean_predictive_entropy",
+                "mean_expected_entropy",
+                "mean_mutual_information",
+                "max_mutual_information",
+            ],
+        ))
 
-    width = max(len(k) for k in metrics)
-    print("\nTest metrics")
-    print("-" * (width + 12))
-    for k, v in metrics.items():
-        print(f"{k:<{width}}  {v:.4f}")
+    _print_metrics(method_name, probs_samples.shape[0], metrics, groups)
 
     (run_dir / "test_metrics.json").write_text(json.dumps(metrics, indent=2))
     save_arrays = {

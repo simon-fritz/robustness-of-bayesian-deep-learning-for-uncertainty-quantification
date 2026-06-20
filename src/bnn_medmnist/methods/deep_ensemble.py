@@ -9,11 +9,13 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
 
 from ..training.trainer import Trainer
 from .base import BayesianMethod
 from bnn_medmnist.utils.seeding import set_seed
+
+
+from bnn_medmnist.data.medmnist_loader import MedMNISTLoader
 
 
 class DeepEnsemble(BayesianMethod):
@@ -25,7 +27,8 @@ class DeepEnsemble(BayesianMethod):
         log_dir: str | Path | None = None,
         class_weights: torch.Tensor | None = None,
         device: str | None = None,
-        n_members = 5
+        n_members = 5,
+        base_seed: int = 42
     ) -> None:
         super().__init__(bayesian_layers=[], n_samples=1)
         self.model: nn.Module | None = None
@@ -36,24 +39,24 @@ class DeepEnsemble(BayesianMethod):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.n_members = n_members
         self.members = []
-
+        self.base_seed = base_seed
 
     def fit(
         self,
         model: nn.Module,
-        train_loader: DataLoader,
-        val_loader: DataLoader | None = None,
+        data: MedMNISTLoader
     ) -> list[nn.Module]:
         for i in range(self.n_members):
             # 1. Unique seed per member
-            seed = getattr(self, 'base_seed', 42) + i
+            seed = self.base_seed + i
             set_seed(seed)
             
-            # 2. Fresh model instance (clone the architecture)
+            # Fresh each time
             member_model = copy.deepcopy(model)
+            train_loader = data.train_loader()
+            val_loader = data.val_loader()
             
-            # 3. Use existing Trainer
-            # Convert ckpt_path to Path if needed and handle None
+            
             ckpt_dir = Path(self.ckpt_path) if self.ckpt_path else Path(".")
             member_ckpt = ckpt_dir.parent / f"member_{i}.pt" if self.ckpt_path else None
             
@@ -65,10 +68,7 @@ class DeepEnsemble(BayesianMethod):
                 class_weights=self.class_weights,
             )
             
-            # 4. Train using the standard pipeline
             trained = trainer.fit(member_model, train_loader, val_loader)
-            
-            # 5. Save to list
             self.members.append(trained)
         return self.members
 
