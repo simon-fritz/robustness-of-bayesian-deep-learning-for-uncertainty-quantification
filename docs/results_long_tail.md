@@ -88,6 +88,7 @@ inverted), DE is bad (0.355), DET is bad (0.426). Only the Laplace
 | :--- | :---: | :---: | :---: |
 | `one_minus_max_softmax` | 0.6722 | 0.4951 | **0.6615** |
 | `predictive_entropy` | 0.6722 | 0.4951 | 0.6615 |
+| `expected_entropy` (aleatoric) | 0.6722 | 0.4411 ⚠️ | 0.6400 |
 | `mutual_information` | N/A | 0.5553 | **0.7088** |
 | `softmax_variance_sum` | N/A | 0.5358 | **0.7024** |
 | `logit_variance_sum` (Laplace only) | — | **0.7967** | — |
