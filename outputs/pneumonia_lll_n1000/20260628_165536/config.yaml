@@ -1,0 +1,43 @@
+data:
+  name: pneumoniamnist
+  flag: pneumoniamnist
+  num_classes: 2
+  in_channels: 1
+  image_size: 28
+  root: ./data
+  download: true
+  batch_size: 128
+  num_workers: 4
+  train_size: 1000
+model:
+  name: small_cnn
+  in_channels: 1
+  num_classes: 2
+  feature_layers:
+  - layer1
+  - layer2
+  - layer3
+  - layer4
+  classifier_layer: fc
+  dropout: 0.0
+method:
+  name: last_layer_laplace
+  bayesian_layers:
+  - fc
+  training:
+    optimizer: adam
+    lr: 0.001
+    weight_decay: 0.0001
+    epochs: 30
+    early_stopping_patience: 5
+    use_class_weights: true
+  laplace:
+    subset_of_weights: last_layer
+    hessian_structure: full
+    prior_precision_method: marglik
+    n_predictive_samples: 100
+experiment_name: pneumonia_lll_n1000
+run_name: pneumonia_lll_n1000
+seed: 42
+output_dir: outputs
+checkpoint_dir: checkpoints
