@@ -8,7 +8,6 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
-#SBATCH --exclude=atlas
 set -e
 cd $SLURM_SUBMIT_DIR
 
