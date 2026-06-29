@@ -146,6 +146,18 @@ class LastLayerLaplace(BayesianMethod):
         return f_mu, f_var
 
     @torch.no_grad()
+    def glm_logit_sigma(self, x: torch.Tensor) -> torch.Tensor:
+        """Standard deviation (sigma) of the analytical Gaussian logit posterior.
+
+        ``sigma = sqrt(logit_var)`` — the per-class standard deviation of the
+        same Gaussian returned by :meth:`glm_logit_distribution`, on the
+        natural ("how many logits wide is one standard deviation") scale.
+        Sampling-free, like the variance it derives from. Shape ``(B, C)``.
+        """
+        _, f_var = self.glm_logit_distribution(x)
+        return f_var.clamp_min(0).sqrt()
+
+    @torch.no_grad()
     def predict_modes(
         self,
         x: torch.Tensor,
@@ -155,20 +167,48 @@ class LastLayerLaplace(BayesianMethod):
         """Run one or both prediction modes and return a structured result.
 
         * ``"mc"``  → MC samples of softmax probabilities (``softmax_samples``).
-        * ``"glm"`` → analytical Gaussian over logits (``logit_mean``/``logit_var``).
+        * ``"glm"`` → analytical Gaussian over logits (``logit_mean``/
+          ``logit_var``/``logit_sigma``).
 
         Returns a dict with keys ``softmax_samples`` ``(S, B, C)``,
-        ``logit_mean`` ``(B, C)``, ``logit_var`` ``(B, C)`` — each ``None`` if
-        the corresponding mode was not requested.
+        ``logit_mean`` ``(B, C)``, ``logit_var`` ``(B, C)``, ``logit_sigma``
+        ``(B, C)`` (= ``sqrt(logit_var)``) — each ``None`` if the corresponding
+        mode was not requested.
         """
         out: dict[str, torch.Tensor | None] = {
             "softmax_samples": None, "logit_mean": None, "logit_var": None,
+            "logit_sigma": None,
         }
         if "mc" in modes:
             out["softmax_samples"] = self.predictive_samples(x, n_samples)
         if "glm" in modes:
             out["logit_mean"], out["logit_var"] = self.glm_logit_distribution(x)
+            out["logit_sigma"] = out["logit_var"].clamp_min(0).sqrt()
         return out
+
+    def sigma_summary(self, train_size: int | None = None) -> dict:
+        """Summary statistics of the posterior covariance for the last layer.
+
+        Returns mean/max of diagonal(Σ) and Frobenius norm of Σ — metrics that
+        should shrink monotonically as training size grows (posterior collapse
+        signal). Saved to ``sigma_summary.json`` in the run directory by
+        ``scripts/train.py``.
+        """
+        if self.la is None:
+            raise RuntimeError("fit must be called before sigma_summary.")
+        cov = self.la.posterior_covariance
+        if not torch.is_tensor(cov):
+            cov = torch.as_tensor(cov)
+        cov = cov.detach().cpu()
+        diag = torch.diagonal(cov)
+        result: dict = {
+            "mean_sigma": float(diag.mean()),
+            "max_sigma": float(diag.max()),
+            "sigma_norm": float(torch.norm(cov, p="fro")),
+        }
+        if train_size is not None:
+            result["train_size"] = int(train_size)
+        return result
 
     @torch.no_grad()
     def predict(self, x: torch.Tensor, n_samples: int | None = None) -> torch.Tensor:

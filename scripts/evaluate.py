@@ -59,14 +59,15 @@ def _deterministic_samples(model, loader, device) -> tuple[torch.Tensor, torch.T
 @torch.no_grad()
 def _laplace_samples(
     la, loader, device, n_samples: int
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Return ``(probs[S, N, C], y[N], logit_mean[N, C], logit_var[N, C])``.
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Return ``(probs[S, N, C], y[N], logit_mean[N, C], logit_var[N, C], logit_sigma[N, C])``.
 
     The MC softmax samples drive the entropy/spread scores; the analytical
     Gaussian over logits (``pred_type="glm"``) gives the sampling-free
-    logit-variance scores.
+    logit-variance scores. ``logit_sigma = sqrt(logit_var)`` is the same
+    Gaussian's standard deviation, on the natural (same-units-as-logits) scale.
     """
-    all_p, all_y, all_lm, all_lv = [], [], [], []
+    all_p, all_y, all_lm, all_lv, all_ls = [], [], [], [], []
     for x, y in loader:
         xb = x.to(device)
         s = la.predictive_samples(xb, pred_type="nn", n_samples=n_samples).cpu()
@@ -75,11 +76,13 @@ def _laplace_samples(
         all_y.append(y)
         all_lm.append(f_mu.cpu())
         all_lv.append(f_var.cpu())
+        all_ls.append(f_var.clamp_min(0).sqrt().cpu())
     return (
         torch.cat(all_p, dim=1),
         torch.cat(all_y),
         torch.cat(all_lm, dim=0),
         torch.cat(all_lv, dim=0),
+        torch.cat(all_ls, dim=0),
     )
 
 
@@ -157,7 +160,7 @@ def main() -> None:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     data = MedMNISTLoader(cfg.data)
 
-    logit_mean = logit_var = None
+    logit_mean = logit_var = logit_sigma = None
     if method_name == "deterministic":
         model = _load_model(cfg, ckpt_path, device, data.metadata.num_classes, data.metadata.in_channels)
         probs_samples, y = _deterministic_samples(model, data.test_loader(), device)
@@ -174,7 +177,7 @@ def main() -> None:
         la.load_state_dict(payload["state_dict"])
         n_samples = int(args.n_samples or cfg.method.laplace.n_predictive_samples)
         print(f"drawing {n_samples} predictive samples per test example...", flush=True)
-        probs_samples, y, logit_mean, logit_var = _laplace_samples(
+        probs_samples, y, logit_mean, logit_var, logit_sigma = _laplace_samples(
             la, data.test_loader(), device, n_samples
         )
         
@@ -252,6 +255,7 @@ def main() -> None:
     if logit_mean is not None and logit_var is not None:
         save_arrays["logit_mean"] = logit_mean.numpy().astype(np.float32)
         save_arrays["logit_var"] = logit_var.numpy().astype(np.float32)
+        save_arrays["logit_sigma"] = logit_sigma.numpy().astype(np.float32)
     np.savez(run_dir / "test_predictions.npz", **save_arrays)
     fig_dir = run_dir / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)

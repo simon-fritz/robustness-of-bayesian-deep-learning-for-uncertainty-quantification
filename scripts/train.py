@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from datetime import datetime
 from pathlib import Path
@@ -170,6 +171,16 @@ def main() -> None:
 
     (run_dir / "checkpoint_path.txt").write_text(str(ckpt_path))
     print(f"checkpoint saved to {ckpt_path}")
+
+    if hasattr(method, "sigma_summary") and getattr(method, "la", None) is not None:
+        getter = getattr(cfg.data, "get", None)
+        train_size = int(getter("train_size", None) or -1) if getter else None
+        try:
+            summary = method.sigma_summary(train_size=train_size if train_size and train_size > 0 else None)
+            (run_dir / "sigma_summary.json").write_text(json.dumps(summary, indent=2))
+            print(f"sigma_summary: {summary}", flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"warning: sigma_summary failed ({exc!r}); skipping.", flush=True)
     print(f"run_dir: {run_dir}")
 
 

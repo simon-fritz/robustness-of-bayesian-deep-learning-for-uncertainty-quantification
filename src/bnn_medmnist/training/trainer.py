@@ -60,7 +60,14 @@ class Trainer:
         if self.use_amp:
             print("mixed precision (AMP) enabled", flush=True)
 
-        best_val = float("inf")
+        # Checkpoint selection: val_auroc (higher is better) when a val_loader
+        # is available, otherwise train_loss (lower is better) as a fallback.
+        # val_loss was tried first but is fragile in low-data + class-weighted
+        # regimes — it can spike immediately after epoch 1 and never recover,
+        # locking "best" onto an undertrained checkpoint (see n=1000 data-
+        # efficiency sweep). AUROC is far less sensitive to that loss-scale
+        # blowup since it only depends on ranking, not magnitude.
+        best_val = float("-inf")
         best_state: dict | None = None
         no_improve = 0
 
@@ -106,8 +113,12 @@ class Trainer:
                         pass
                     writer = None
 
-            score = val_metrics.get("loss", train_loss)
-            if score < best_val:
+            if "auroc" in val_metrics:
+                score, higher_is_better = val_metrics["auroc"], True
+            else:
+                score, higher_is_better = train_loss, False
+            improved = score > best_val if higher_is_better else score < best_val
+            if best_state is None or improved:
                 best_val = score
                 best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
                 no_improve = 0
@@ -117,7 +128,8 @@ class Trainer:
             else:
                 no_improve += 1
                 if patience > 0 and no_improve >= patience:
-                    print(f"early stop at epoch {epoch + 1} (best val_loss={best_val:.4f})")
+                    metric_name = "val_auroc" if higher_is_better else "train_loss"
+                    print(f"early stop at epoch {epoch + 1} (best {metric_name}={best_val:.4f})")
                     break
 
         if writer is not None:

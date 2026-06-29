@@ -1,0 +1,22 @@
+# Data-efficiency variant of pneumonia_lll: training capped to 10000 examples
+# (random subsample under the global seed; val/test untouched). Pairs with
+# pneumonia_lll_n100 / pneumonia_lll_n1000 to study how last-layer Laplace's
+# calibration and epistemic-uncertainty signal degrade as training data shrinks.
+# (PneumoniaMNIST's train split has only a few thousand examples, so this cap
+# is effectively a no-op / "full data" anchor point of the sweep — included for
+# a consistent 100/1000/10000 series and to make a fixed-size cap explicit.)
+defaults:
+  - /data: pneumoniamnist
+  - /model: small_cnn
+  - /method: last_layer_laplace
+  - _self_
+
+experiment_name: pneumonia_lll_n10000
+run_name: pneumonia_lll_n10000
+seed: 42
+
+data:
+  train_size: 10000
+
+output_dir: outputs
+checkpoint_dir: checkpoints

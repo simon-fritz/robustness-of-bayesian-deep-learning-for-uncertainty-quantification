@@ -117,6 +117,11 @@ class MedMNISTLoader(BaseDataset):
       * ``class_subsampling: dict[int, float]`` — keep the given fraction of
         each listed class in train/val (random subsample under the global
         seed). Test set is left untouched.
+      * ``train_size: int`` — cap the *training* split to at most this many
+        examples (e.g. 100 / 1000 / 10000), drawn uniformly at random under
+        the global seed, applied after ``exclude_classes``/``class_subsampling``.
+        Used for data-efficiency / low-data-regime experiments. Val and test
+        are left untouched.
     """
 
     def __init__(self, cfg) -> None:
@@ -153,6 +158,7 @@ class MedMNISTLoader(BaseDataset):
         getter = getattr(cfg, "get", None)
         exclude_classes = getter("exclude_classes", None) if getter else None
         class_subsampling = getter("class_subsampling", None) if getter else None
+        train_size = getter("train_size", None) if getter else None
         self._exclude_classes: list[int] = (
             [int(c) for c in exclude_classes] if exclude_classes else []
         )
@@ -161,6 +167,7 @@ class MedMNISTLoader(BaseDataset):
             {int(k): float(v) for k, v in dict(class_subsampling).items()}
             if class_subsampling else {}
         )
+        self._train_size: int | None = int(train_size) if train_size else None
 
         seed = int(getter("seed", 0)) if getter else 0
         self._train = self._apply_filters(train_full, split="train", seed=seed)
@@ -174,10 +181,11 @@ class MedMNISTLoader(BaseDataset):
         self._batch_size = int(cfg.batch_size)
         self._num_workers = int(cfg.num_workers)
 
-        if self._exclude_classes or self._class_subsampling:
+        if self._exclude_classes or self._class_subsampling or self._train_size:
             print(
                 f"[{flag}] exclude_classes={self._exclude_classes} "
-                f"class_subsampling={self._class_subsampling}",
+                f"class_subsampling={self._class_subsampling} "
+                f"train_size={self._train_size}",
                 flush=True,
             )
             print(f"[{flag}] train per-class counts: {self._per_class_counts(self._train)}", flush=True)
@@ -188,7 +196,8 @@ class MedMNISTLoader(BaseDataset):
     # filtering helpers
     # ------------------------------------------------------------------
     def _apply_filters(self, ds, split: str, seed: int):
-        if not self._exclude_classes and not self._class_subsampling:
+        cap_size = self._train_size if split == "train" else None
+        if not self._exclude_classes and not self._class_subsampling and not cap_size:
             return ds
         labels = _labels_array(ds)
         keep = np.ones(len(labels), dtype=bool)
@@ -203,8 +212,35 @@ class MedMNISTLoader(BaseDataset):
                 n_keep = int(round(frac * len(cls_idx)))
                 drop_idx = rng.choice(cls_idx, size=len(cls_idx) - n_keep, replace=False)
                 keep[drop_idx] = False
-        indices = np.where(keep)[0].tolist()
-        return Subset(ds, indices)
+        indices = np.where(keep)[0]
+        if cap_size:
+            if len(indices) <= cap_size:
+                import warnings
+                warnings.warn(
+                    f"train_size={cap_size} >= available training data "
+                    f"({len(indices)} samples after filters). No capping applied.",
+                    UserWarning, stacklevel=4,
+                )
+            else:
+                # Stratified subsample: preserve per-class proportions via
+                # largest-remainder rounding so class balance is maintained.
+                rng = np.random.default_rng(seed + 10_000)
+                labels_kept = labels[indices]
+                classes = np.unique(labels_kept)
+                counts = np.array([int(np.sum(labels_kept == c)) for c in classes])
+                total = len(indices)
+                raw = counts * cap_size / total
+                n_per_class = np.floor(raw).astype(int)
+                remainder = cap_size - int(n_per_class.sum())
+                top = np.argsort(-(raw - n_per_class))[:remainder]
+                n_per_class[top] += 1
+                selected: list[int] = []
+                for cls, n in zip(classes, n_per_class):
+                    cls_idx = indices[labels_kept == cls]
+                    chosen = rng.choice(cls_idx, size=min(int(n), len(cls_idx)), replace=False)
+                    selected.extend(chosen.tolist())
+                indices = np.array(selected)
+        return Subset(ds, indices.tolist())
 
     def _per_class_counts(self, ds) -> dict[int, int]:
         if isinstance(ds, Subset):
@@ -233,6 +269,10 @@ class MedMNISTLoader(BaseDataset):
     @property
     def subsampled_classes(self) -> dict[int, float]:
         return dict(self._class_subsampling)
+
+    @property
+    def train_size(self) -> int | None:
+        return self._train_size
 
     def held_out_or_tail_classes(self) -> list[int]:
         """Classes that should be treated as OOD/tail at evaluation time."""

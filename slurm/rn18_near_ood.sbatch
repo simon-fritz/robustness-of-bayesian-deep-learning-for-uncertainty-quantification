@@ -9,10 +9,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 set -e
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-cd "$REPO_ROOT"
+cd $SLURM_SUBMIT_DIR
 
 python -m pip install --user -e .
 

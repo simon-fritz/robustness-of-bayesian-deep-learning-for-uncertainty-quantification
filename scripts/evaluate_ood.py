@@ -87,11 +87,14 @@ def _assert_id_ood_shapes(id_loader_t, ood_loaders) -> None:
 def _collect(model, loader, device, *, method_name: str, predictor=None, n_samples: int = 1):
     """Run inference and collect predictions, images, labels, and logit moments.
 
-    Returns ``(probs[S, N, C], images[N, ...], labels[N], logit_mean, logit_var)``
-    where the logit moments are ``(N, C)`` tensors for Laplace runs and ``None``
-    for deterministic runs (no posterior over weights).
+    Returns ``(probs[S, N, C], images[N, ...], labels[N], logit_mean, logit_var,
+    logit_sigma)`` where the logit moments are ``(N, C)`` tensors for Laplace
+    runs and ``None`` for deterministic/ensemble runs (no analytical posterior
+    over the logits). ``logit_sigma = sqrt(logit_var)`` — the natural-scale
+    (same units as the logits) standard deviation, handed back alongside the
+    variance so callers can cache/plot either representation.
     """
-    all_p, all_x, all_y, all_lm, all_lv = [], [], [], [], []
+    all_p, all_x, all_y, all_lm, all_lv, all_ls = [], [], [], [], [], []
     for x, y in loader:
         all_x.append(x.cpu())
         all_y.append(y.cpu() if isinstance(y, torch.Tensor) else torch.as_tensor(y))
@@ -102,6 +105,7 @@ def _collect(model, loader, device, *, method_name: str, predictor=None, n_sampl
             p = res["softmax_samples"].cpu()
             all_lm.append(res["logit_mean"].cpu())
             all_lv.append(res["logit_var"].cpu())
+            all_ls.append(res["logit_sigma"].cpu())
         elif method_name == "deep_ensemble":
             batch_probs = [torch.softmax(m(x.to(device)), dim=-1).cpu() for m in model]
             p = torch.stack(batch_probs, dim=0)
@@ -113,7 +117,8 @@ def _collect(model, loader, device, *, method_name: str, predictor=None, n_sampl
     labels = torch.cat(all_y, dim=0)
     logit_mean = torch.cat(all_lm, dim=0) if all_lm else None
     logit_var = torch.cat(all_lv, dim=0) if all_lv else None
-    return probs, images, labels, logit_mean, logit_var
+    logit_sigma = torch.cat(all_ls, dim=0) if all_ls else None
+    return probs, images, labels, logit_mean, logit_var, logit_sigma
 
 
 # ---------------------------------------------------------------------------
@@ -393,7 +398,7 @@ def main() -> None:
                                         key=lambda kv: int(kv[0]))]
 
     print("[evaluate_ood] predicting on ID test set...", flush=True)
-    preds_id, images_id, labels_id, lm_id, lv_id = _collect(
+    preds_id, images_id, labels_id, lm_id, lv_id, ls_id = _collect(
         model, id_loader_t, device,
         method_name=method_name, predictor=predictor, n_samples=n_samples,
     )
@@ -405,6 +410,7 @@ def main() -> None:
     if lm_id is not None:
         id_save["logit_mean"] = lm_id.numpy().astype(np.float32)
         id_save["logit_var"] = lv_id.numpy().astype(np.float32)
+        id_save["logit_sigma"] = ls_id.numpy().astype(np.float32)
     np.savez(scenario_dir / "id_predictions.npz", **id_save)
 
     id_scores = per_sample_scores(preds_id, lm_id, lv_id)
@@ -413,7 +419,7 @@ def main() -> None:
     written_figs: list[Path] = []
     for ood_name, ood_loader in ood_loaders.items():
         print(f"[evaluate_ood] predicting on OOD '{ood_name}'...", flush=True)
-        preds_ood, images_ood, _, lm_ood, lv_ood = _collect(
+        preds_ood, images_ood, _, lm_ood, lv_ood, ls_ood = _collect(
             model, ood_loader, device,
             method_name=method_name, predictor=predictor, n_samples=n_samples,
         )
@@ -424,6 +430,7 @@ def main() -> None:
         if lm_ood is not None:
             ood_save["logit_mean"] = lm_ood.numpy().astype(np.float32)
             ood_save["logit_var"] = lv_ood.numpy().astype(np.float32)
+            ood_save["logit_sigma"] = ls_ood.numpy().astype(np.float32)
         np.savez(scenario_dir / f"{ood_name}_predictions.npz", **ood_save)
 
         ood_scores = per_sample_scores(preds_ood, lm_ood, lv_ood)

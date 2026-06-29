@@ -15,9 +15,9 @@ posterior predictive matters: Hüllermeier & Waegeman (2021) point out that
 Mutual Information is only one way to summarise second-order uncertainty and
 need not capture everything the posterior encodes. This module therefore also
 provides direct statistical spread measures (variance of the softmax outputs,
-variance of the Gaussian logit posterior, expected pairwise KL) so the
-evaluation can compare different *conceptual families* of uncertainty scores
-rather than just entropy-based ones.
+variance of the Gaussian logit posterior, quantile/inter-quantile ranges,
+expected pairwise KL) so the evaluation can compare different *conceptual
+families* of uncertainty scores rather than just entropy-based ones.
 
 References
 ----------
@@ -109,6 +109,57 @@ def softmax_predictive_variance(
     var = probs_samples.var(dim=0, unbiased=False)  # (B, C)
     mean = probs_samples.mean(dim=0)  # (B, C)
     return _aggregate_per_class(var, mean, aggregate)
+
+
+def predictive_quantiles(probs_samples: torch.Tensor, qs: "list[float] | tuple[float, ...]") -> torch.Tensor:
+    """Quantiles of the posterior-predictive softmax across MC samples.
+
+    For each input ``x`` and class ``k``, computes the requested quantiles of
+    ``softmax(f_w(x))_k`` over the ``n_samples`` posterior draws — a
+    distribution-free description of the predictive spread that, unlike
+    variance, is not dominated by outlier samples and directly yields credible
+    intervals (e.g. ``qs=[0.05, 0.95]`` for a 90% interval).
+
+    Args:
+        probs_samples: ``(n_samples, B, C)`` posterior-sample softmax probs.
+        qs: quantile levels in ``[0, 1]``, e.g. ``[0.05, 0.5, 0.95]``.
+
+    Returns:
+        Tensor of shape ``(len(qs), B, C)``, one quantile slice per level.
+    """
+    q_t = torch.as_tensor(list(qs), dtype=probs_samples.dtype, device=probs_samples.device)
+    return torch.quantile(probs_samples, q_t, dim=0)
+
+
+def softmax_predictive_quantile_range(
+    probs_samples: torch.Tensor,
+    lower: float = 0.05,
+    upper: float = 0.95,
+    aggregate: str = "sum",
+) -> torch.Tensor:
+    """Inter-quantile range of the softmax outputs across posterior samples.
+
+    A robust, distribution-free analogue of :func:`softmax_predictive_variance`:
+    instead of the second moment, this measures the width of the central
+    ``upper - lower`` credible interval of ``softmax(f_w(x))_k`` across
+    posterior draws — per Hüllermeier & Waegeman (2021), the choice of spread
+    summary matters, and quantile ranges are not skewed by extreme samples the
+    way variance is.
+
+    Args:
+        probs_samples: ``(n_samples, B, C)`` posterior-sample softmax probs.
+        lower: lower quantile level (default 0.05).
+        upper: upper quantile level (default 0.95).
+        aggregate: ``"sum"`` sums the per-class ranges → ``(B,)``; ``"max"``
+            takes the range of the predicted (argmax of mean) class → ``(B,)``.
+
+    Returns:
+        Per-sample score of shape ``(B,)``.
+    """
+    lo, hi = predictive_quantiles(probs_samples, [lower, upper])
+    spread = hi - lo  # (B, C)
+    mean = probs_samples.mean(dim=0)  # (B, C)
+    return _aggregate_per_class(spread, mean, aggregate)
 
 
 def logit_variance(
