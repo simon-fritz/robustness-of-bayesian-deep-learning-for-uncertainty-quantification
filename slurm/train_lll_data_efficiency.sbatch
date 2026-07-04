@@ -13,7 +13,7 @@ ml python/anaconda3
 set -e
 cd $SLURM_SUBMIT_DIR
 
-python -m pip install --user -e .
+flock ~/.pip_install.lock python -m pip install --user -e .
 
 # Usage:
 #   sbatch slurm/train_lll_data_efficiency.sbatch configs/experiment/training/pneumonia_lll_n100.yaml
@@ -24,10 +24,15 @@ python -m pip install --user -e .
 #   sbatch slurm/train_lll_data_efficiency.sbatch configs/experiment/training/pneumonia_map_n10000.yaml
 
 CONFIG=${1:-"configs/experiment/training/pneumonia_lll_n1000.yaml"}
-echo "=== Training config: $CONFIG ==="
+SEED=${2:-""}
+SEED_ARG=""
+if [ -n "$SEED" ]; then
+    SEED_ARG="--seed $SEED"
+fi
+echo "=== Training config: $CONFIG seed=${SEED:-from_config} ==="
 
 # --- Phase 1: train ---
-python scripts/train.py --config "$CONFIG" | tee /tmp/train_out_$SLURM_JOB_ID.txt
+python scripts/train.py --config "$CONFIG" $SEED_ARG | tee /tmp/train_out_$SLURM_JOB_ID.txt
 
 RUN_DIR=$(grep "^run_dir:" /tmp/train_out_$SLURM_JOB_ID.txt | tail -1 | awk '{print $2}')
 if [ -z "$RUN_DIR" ]; then

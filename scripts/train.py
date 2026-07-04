@@ -117,6 +117,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train a model under a Bayesian method.")
     parser.add_argument("--config", required=True)
     parser.add_argument("--epochs", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=None,
+                        help="Override seed in config (for multi-seed sweeps).")
     parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args()
 
@@ -125,6 +127,8 @@ def main() -> None:
         _apply_smoke_overrides(cfg)
     if args.epochs is not None:
         _training_block(cfg.method).epochs = args.epochs
+    if args.seed is not None:
+        cfg.seed = args.seed
 
     set_seed(int(cfg.seed))
 
