@@ -1,0 +1,37 @@
+data:
+  name: pneumoniamnist
+  flag: pneumoniamnist
+  num_classes: 2
+  in_channels: 1
+  image_size: 28
+  root: ./data
+  download: true
+  batch_size: 128
+  num_workers: 4
+  train_size: 100
+model:
+  name: small_cnn
+  in_channels: 1
+  num_classes: 2
+  feature_layers:
+  - layer1
+  - layer2
+  - layer3
+  - layer4
+  classifier_layer: fc
+  dropout: 0.0
+method:
+  name: deterministic
+  bayesian_layers: []
+  n_samples: 1
+  optimizer: adam
+  lr: 0.001
+  weight_decay: 0.0001
+  epochs: 30
+  early_stopping_patience: 5
+  use_class_weights: true
+experiment_name: pneumonia_map_n100
+run_name: pneumonia_map_n100
+seed: 3
+output_dir: outputs
+checkpoint_dir: checkpoints

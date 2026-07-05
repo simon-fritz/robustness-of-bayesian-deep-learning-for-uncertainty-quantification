@@ -1,0 +1,56 @@
+timestamp: 2026-07-04T16:16:17
+git_commit: 36907af6ace6c17047b06e672382764c3f310e05
+slurm_job_id: 174725
+hostname: helios
+cwd: /vol/miltank/users/ahra/robustness-of-bayesian-deep-learning-for-uncertainty-quantification
+run_dir: /vol/miltank/users/ahra/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/outputs/pneumonia_ensemble_n1000/20260704_161617
+checkpoint: /vol/miltank/users/ahra/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/checkpoints/pneumonia_ensemble_n1000/20260704_161617/best.pt
+tensorboard: /vol/miltank/users/ahra/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/logs/tensorboard/pneumonia_ensemble_n1000_20260704_161617
+config:
+data:
+  name: pneumoniamnist
+  flag: pneumoniamnist
+  num_classes: 2
+  in_channels: 1
+  image_size: 28
+  root: ./data
+  download: true
+  batch_size: 128
+  num_workers: 4
+  train_size: 1000
+  image_transform:
+    resize: 224
+    expand_channels_to: 3
+    normalize:
+      mean:
+      - 0.485
+      - 0.456
+      - 0.406
+      std:
+      - 0.229
+      - 0.224
+      - 0.225
+model:
+  name: pretrained_resnet18
+  weights: imagenet
+  freeze_backbone: false
+  num_classes: ???
+  input_channels: 3
+  input_resolution: 224
+method:
+  name: deep_ensemble
+  bayesian_layers: []
+  n_samples: 1
+  n_members: 5
+  training:
+    optimizer: adam
+    lr: 0.001
+    weight_decay: 0.0001
+    epochs: 30
+    early_stopping_patience: 5
+    use_class_weights: true
+experiment_name: pneumonia_ensemble_n1000
+run_name: pneumonia_ensemble_n1000
+seed: 2
+output_dir: outputs
+checkpoint_dir: checkpoints

@@ -1,0 +1,44 @@
+{
+  "organamnist": {
+    "predictive_entropy": {
+      "auroc": 0.7831465658361962,
+      "auprc": 0.9877445925983546,
+      "fpr_at_95_tpr": 0.7451923076923077
+    },
+    "one_minus_max_softmax": {
+      "auroc": 0.783143185469797,
+      "auprc": 0.987744053644307,
+      "fpr_at_95_tpr": 0.7451923076923077
+    },
+    "mutual_information": {
+      "auroc": 0.7806564978033927,
+      "auprc": 0.988267551096016,
+      "fpr_at_95_tpr": 0.7419871794871795
+    },
+    "expected_entropy": {
+      "auroc": 0.7570913777039325,
+      "auprc": 0.9829933205027453,
+      "fpr_at_95_tpr": 0.7451923076923077
+    },
+    "softmax_variance_sum": {
+      "auroc": 0.7823312665322453,
+      "auprc": 0.9885911352248062,
+      "fpr_at_95_tpr": 0.7435897435897436
+    },
+    "softmax_variance_max": {
+      "auroc": 0.7823303651012055,
+      "auprc": 0.9885910684212879,
+      "fpr_at_95_tpr": 0.7435897435897436
+    },
+    "softmax_quantile_range_sum": {
+      "auroc": 0.7858210666597436,
+      "auprc": 0.9889794665729458,
+      "fpr_at_95_tpr": 0.7435897435897436
+    },
+    "softmax_quantile_range_max": {
+      "auroc": 0.7858195792985281,
+      "auprc": 0.9889793173834578,
+      "fpr_at_95_tpr": 0.7435897435897436
+    }
+  }
+}
