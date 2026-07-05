@@ -273,6 +273,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--outputs-dir", default="outputs")
     parser.add_argument("--out-dir", default="results")
+    parser.add_argument(
+        "--seeds", type=int, nargs="+", default=None,
+        metavar="S",
+        help="Only include runs with these seeds (e.g. --seeds 0 1 2 3 4). "
+             "Default: all runs. Use this to exclude old pre-sweep runs.",
+    )
     args = parser.parse_args()
 
     outputs_dir = (PACKAGE_ROOT / args.outputs_dir).resolve()
@@ -282,6 +288,11 @@ def main() -> None:
 
     print("Scanning for data-efficiency runs...")
     raw = build_raw_table(outputs_dir)
+
+    if args.seeds is not None and not raw.empty:
+        before = len(raw)
+        raw = raw[raw["seed"].isin(args.seeds)].reset_index(drop=True)
+        print(f"  [filter] kept seeds {args.seeds}: {before} → {len(raw)} rows")
 
     if raw.empty:
         print("No completed runs found. Run the sweep first.")
