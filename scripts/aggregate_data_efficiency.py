@@ -1,15 +1,18 @@
 """Aggregate data-efficiency sweep results into a summary CSV and plots.
 
-Scans outputs/ for runs matching pneumonia_lll_n* and pneumonia_map_n*,
-reads ood_metrics.json and sigma_summary.json, builds a summary table, and
-generates two plots:
-
-  Plot 1 — AUROC vs Training Size (far-OOD and near-OOD subplots)
-  Plot 2 — Posterior sigma vs Training Size (LLL only)
+Scans outputs/ for ALL runs matching each pneumonia_{method}_n{size} pattern,
+reads ood_metrics.json and sigma_summary.json, computes mean ± std across seeds,
+and generates plots with error bars.
 
 Usage:
     python scripts/aggregate_data_efficiency.py
     python scripts/aggregate_data_efficiency.py --outputs-dir outputs --out-dir results
+
+Output files:
+    results/data_efficiency_raw.csv       — one row per (method, n, seed)
+    results/data_efficiency_summary.csv   — one row per (method, n) with mean±std
+    results/plots/auroc_vs_train_size.png
+    results/plots/sigma_vs_train_size.png
 """
 
 from __future__ import annotations
@@ -21,16 +24,17 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from omegaconf import OmegaConf
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 
 RUN_PATTERNS = [
-    ("lll",      "pneumonia_lll_n100",      100),
-    ("lll",      "pneumonia_lll_n1000",     1000),
-    ("lll",      "pneumonia_lll_n10000",    10000),
-    ("map",      "pneumonia_map_n100",      100),
-    ("map",      "pneumonia_map_n1000",     1000),
-    ("map",      "pneumonia_map_n10000",    10000),
+    ("lll",      "pneumonia_lll_n100",       100),
+    ("lll",      "pneumonia_lll_n1000",      1000),
+    ("lll",      "pneumonia_lll_n10000",     10000),
+    ("map",      "pneumonia_map_n100",       100),
+    ("map",      "pneumonia_map_n1000",      1000),
+    ("map",      "pneumonia_map_n10000",     10000),
     ("ensemble", "pneumonia_ensemble_n100",  100),
     ("ensemble", "pneumonia_ensemble_n1000", 1000),
     ("ensemble", "pneumonia_ensemble_n10000",10000),
@@ -43,20 +47,27 @@ SCORES_LLL      = ["mutual_information", "logit_variance_sum", "expected_pairwis
                    "softmax_variance_sum"]
 SCORES_MAP      = ["predictive_entropy", "one_minus_max_softmax"]
 SCORES_ENSEMBLE = ["mutual_information", "softmax_variance_sum"]
-# Note: expected_pairwise_kl requires >=10 MC samples; ensemble default
-# n_members=5, so this score is always None for ensemble runs and excluded
-# from ood_metrics.json entirely.
 
 
-def _latest_run(outputs_dir: Path, run_name: str) -> Path | None:
+def _all_runs(outputs_dir: Path, run_name: str) -> list[Path]:
+    """Return all completed run dirs for a given run_name, sorted oldest-first."""
     base = outputs_dir / run_name
     if not base.exists():
+        return []
+    return sorted(
+        [c for c in base.iterdir() if c.is_dir() and (c / "config.yaml").exists()]
+    )
+
+
+def _read_seed(run_dir: Path) -> int | None:
+    cfg_path = run_dir / "config.yaml"
+    if not cfg_path.exists():
         return None
-    candidates = sorted(base.iterdir(), reverse=True)
-    for c in candidates:
-        if c.is_dir() and (c / "config.yaml").exists():
-            return c
-    return None
+    try:
+        cfg = OmegaConf.load(cfg_path)
+        return int(cfg.seed)
+    except Exception:
+        return None
 
 
 def _read_ood_auroc(run_dir: Path, scenario: str, ood_dataset: str, score: str) -> float | None:
@@ -74,31 +85,73 @@ def _read_sigma(run_dir: Path) -> dict | None:
     return json.loads(p.read_text())
 
 
-def build_table(outputs_dir: Path) -> pd.DataFrame:
+def build_raw_table(outputs_dir: Path) -> pd.DataFrame:
+    """One row per (method, train_size, seed run)."""
     rows = []
     for method, run_name, train_size in RUN_PATTERNS:
-        run_dir = _latest_run(outputs_dir, run_name)
-        if run_dir is None:
-            print(f"  [skip] {run_name} — no completed run found in {outputs_dir}")
+        run_dirs = _all_runs(outputs_dir, run_name)
+        if not run_dirs:
+            print(f"  [skip] {run_name} — no completed run found")
             continue
-        print(f"  [found] {run_name} → {run_dir.name}")
-
-        row: dict = {"method": method, "run_name": run_name, "train_size": train_size}
+        print(f"  [found] {run_name} — {len(run_dirs)} run(s)")
 
         scores = {"lll": SCORES_LLL, "map": SCORES_MAP, "ensemble": SCORES_ENSEMBLE}[method]
-        for score in scores:
-            row[f"far_ood_{score}"]  = _read_ood_auroc(run_dir, "far_ood",  FAR_OOD_DATASET,  score)
-            row[f"near_ood_{score}"] = _read_ood_auroc(run_dir, "near_ood", NEAR_OOD_DATASET, score)
 
-        sigma = _read_sigma(run_dir)
-        if sigma:
-            row["mean_sigma"] = sigma.get("mean_sigma")
-            row["max_sigma"]  = sigma.get("max_sigma")
-            row["sigma_norm"] = sigma.get("sigma_norm")
+        for run_dir in run_dirs:
+            seed = _read_seed(run_dir)
+            row: dict = {
+                "method": method,
+                "run_name": run_name,
+                "train_size": train_size,
+                "seed": seed,
+                "run_dir": str(run_dir),
+            }
 
-        rows.append(row)
+            for score in scores:
+                row[f"far_ood_{score}"]  = _read_ood_auroc(run_dir, "far_ood",  FAR_OOD_DATASET,  score)
+                row[f"near_ood_{score}"] = _read_ood_auroc(run_dir, "near_ood", NEAR_OOD_DATASET, score)
 
-    return pd.DataFrame(rows).sort_values(["method", "train_size"]).reset_index(drop=True)
+            sigma = _read_sigma(run_dir)
+            if sigma:
+                row["mean_sigma"] = sigma.get("mean_sigma")
+                row["max_sigma"]  = sigma.get("max_sigma")
+                row["sigma_norm"] = sigma.get("sigma_norm")
+
+            rows.append(row)
+
+    return pd.DataFrame(rows).sort_values(["method", "train_size", "seed"]).reset_index(drop=True)
+
+
+def build_summary_table(raw: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate raw rows to mean ± std per (method, train_size)."""
+    numeric_cols = [c for c in raw.columns if c not in ("method", "run_name", "train_size", "seed", "run_dir")]
+    agg: list[dict] = []
+    for (method, train_size), group in raw.groupby(["method", "train_size"]):
+        row: dict = {"method": method, "train_size": train_size, "n_seeds": len(group)}
+        for col in numeric_cols:
+            vals = group[col].dropna()
+            if len(vals) == 0:
+                row[f"{col}_mean"] = float("nan")
+                row[f"{col}_std"]  = float("nan")
+            else:
+                row[f"{col}_mean"] = float(vals.mean())
+                row[f"{col}_std"]  = float(vals.std(ddof=0)) if len(vals) > 1 else 0.0
+        agg.append(row)
+    return pd.DataFrame(agg).sort_values(["method", "train_size"]).reset_index(drop=True)
+
+
+def _plot_series(ax, sizes, means, stds, label, color, marker):
+    means = np.array(means, dtype=float)
+    stds  = np.array(stds,  dtype=float)
+    mask  = ~np.isnan(means)
+    if not mask.any():
+        return
+    xs = np.array(sizes)[mask]
+    ys = means[mask]
+    es = stds[mask]
+    ax.plot(xs, ys, marker=marker, label=label, color=color)
+    if es.any():
+        ax.fill_between(xs, ys - es, ys + es, alpha=0.15, color=color)
 
 
 def plot_auroc(df: pd.DataFrame, out_dir: Path) -> None:
@@ -110,41 +163,45 @@ def plot_auroc(df: pd.DataFrame, out_dir: Path) -> None:
 
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     color_map: dict[str, str] = {}
+    ci = 0
 
     for scenario_key, title, ax in scenarios:
-        ci = 0
+        ci_local = ci
         for method, group in df.groupby("method"):
             group = group.sort_values("train_size")
             sizes = group["train_size"].tolist()
 
             if method == "lll":
                 plot_scores = [
-                    ("mutual_information",   "LLL — Mutual Information"),
-                    ("logit_variance_sum",   "LLL — Logit Variance"),
-                    ("expected_pairwise_kl", "LLL — Exp. Pairwise KL"),
+                    ("mutual_information",   "LLL — Mutual Information",   "o"),
+                    ("logit_variance_sum",   "LLL — Logit Variance",       "o"),
+                    ("expected_pairwise_kl", "LLL — Exp. Pairwise KL",    "o"),
                 ]
             elif method == "ensemble":
                 plot_scores = [
-                    ("mutual_information",    "Ensemble — Mutual Information"),
-                    ("softmax_variance_sum",  "Ensemble — Softmax Variance"),
+                    ("mutual_information",   "Ensemble — Mutual Information",  "s"),
+                    ("softmax_variance_sum", "Ensemble — Softmax Variance",    "s"),
                 ]
             else:
                 plot_scores = [
-                    ("predictive_entropy",    "MAP — Predictive Entropy"),
-                    ("one_minus_max_softmax", "MAP — Max Softmax"),
+                    ("predictive_entropy",    "MAP — Predictive Entropy",  "^"),
+                    ("one_minus_max_softmax", "MAP — Max Softmax",         "^"),
                 ]
 
-            for score_key, label in plot_scores:
-                col = f"{scenario_key}_{score_key}"
-                if col not in group.columns:
+            for score_key, label, marker in plot_scores:
+                mean_col = f"{scenario_key}_{score_key}_mean"
+                std_col  = f"{scenario_key}_{score_key}_std"
+                if mean_col not in group.columns:
                     continue
-                vals = group[col].tolist()
-                if all(v is None for v in vals):
-                    continue
-                color = color_map.setdefault(label, colors[ci % len(colors)])
-                ci += 1 if label not in color_map else 0
-                marker = "o" if method == "lll" else "s"
-                ax.plot(sizes, vals, marker=marker, label=label, color=color)
+                color = color_map.setdefault(label, colors[ci_local % len(colors)])
+                if label not in color_map:
+                    ci_local += 1
+                _plot_series(
+                    ax, sizes,
+                    group[mean_col].tolist(),
+                    group[std_col].tolist() if std_col in group.columns else [0.0] * len(sizes),
+                    label, color, marker,
+                )
 
         ax.set_xscale("log")
         ax.set_xticks([100, 1000, 10000])
@@ -166,25 +223,31 @@ def plot_auroc(df: pd.DataFrame, out_dir: Path) -> None:
 
 def plot_sigma(df: pd.DataFrame, out_dir: Path) -> None:
     lll = df[df["method"] == "lll"].sort_values("train_size")
-    if lll.empty or "mean_sigma" not in lll.columns:
+    if lll.empty or "mean_sigma_mean" not in lll.columns:
         print("  [skip] sigma plot — no LLL sigma data found")
         return
 
     fig, ax = plt.subplots(figsize=(7, 5))
     ax.set_title("Posterior Sigma vs Training Size (Last-Layer Laplace)", fontsize=12)
     sizes = lll["train_size"].tolist()
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
-    for col, label, marker in [
-        ("mean_sigma", "mean diagonal(Σ)", "o"),
-        ("max_sigma",  "max diagonal(Σ)",  "s"),
+    for col, label, marker, color in [
+        ("mean_sigma", "mean diagonal(Σ)", "o", colors[0]),
+        ("max_sigma",  "max diagonal(Σ)",  "s", colors[1]),
     ]:
-        if col in lll.columns and lll[col].notna().any():
-            ax.plot(sizes, lll[col].tolist(), marker=marker, label=label)
+        mean_col = f"{col}_mean"
+        std_col  = f"{col}_std"
+        if mean_col in lll.columns and lll[mean_col].notna().any():
+            _plot_series(ax, sizes, lll[mean_col].tolist(),
+                         lll[std_col].tolist() if std_col in lll.columns else [0.0]*len(sizes),
+                         label, color, marker)
 
     ax2 = ax.twinx()
-    if "sigma_norm" in lll.columns and lll["sigma_norm"].notna().any():
-        ax2.plot(sizes, lll["sigma_norm"].tolist(), marker="^", color="tab:green",
-                 linestyle="--", label="‖Σ‖_F (right axis)")
+    if "sigma_norm_mean" in lll.columns and lll["sigma_norm_mean"].notna().any():
+        _plot_series(ax2, sizes, lll["sigma_norm_mean"].tolist(),
+                     lll["sigma_norm_std"].tolist() if "sigma_norm_std" in lll.columns else [0.0]*len(sizes),
+                     "‖Σ‖_F (right axis)", "tab:green", "^")
         ax2.set_ylabel("Frobenius norm ‖Σ‖_F", color="tab:green")
         ax2.tick_params(axis="y", labelcolor="tab:green")
 
@@ -193,7 +256,6 @@ def plot_sigma(df: pd.DataFrame, out_dir: Path) -> None:
     ax.set_xticklabels(["100", "1000", "10000"])
     ax.set_xlabel("Training size")
     ax.set_ylabel("Sigma (posterior variance diagonal)")
-    ax.legend(loc="upper right", fontsize=9)
     ax.grid(True, alpha=0.3)
 
     lines1, labels1 = ax.get_legend_handles_labels()
@@ -211,6 +273,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--outputs-dir", default="outputs")
     parser.add_argument("--out-dir", default="results")
+    parser.add_argument(
+        "--seeds", type=int, nargs="+", default=None,
+        metavar="S",
+        help="Only include runs with these seeds (e.g. --seeds 0 1 2 3 4). "
+             "Default: all runs. Use this to exclude old pre-sweep runs.",
+    )
     args = parser.parse_args()
 
     outputs_dir = (PACKAGE_ROOT / args.outputs_dir).resolve()
@@ -219,20 +287,49 @@ def main() -> None:
     plots_dir.mkdir(parents=True, exist_ok=True)
 
     print("Scanning for data-efficiency runs...")
-    df = build_table(outputs_dir)
+    raw = build_raw_table(outputs_dir)
 
-    if df.empty:
+    if args.seeds is not None and not raw.empty:
+        before = len(raw)
+        raw = raw[raw["seed"].isin(args.seeds)].reset_index(drop=True)
+        print(f"  [filter] kept seeds {args.seeds}: {before} → {len(raw)} rows")
+
+    if raw.empty:
         print("No completed runs found. Run the sweep first.")
         return
 
-    csv_path = out_dir / "data_efficiency_summary.csv"
-    df.to_csv(csv_path, index=False)
-    print(f"\nsaved: {csv_path}")
-    print(df.to_string(index=False))
+    raw_csv = out_dir / "data_efficiency_raw.csv"
+    raw.to_csv(raw_csv, index=False)
+    print(f"\nsaved raw: {raw_csv}")
+
+    summary = build_summary_table(raw)
+    summary_csv = out_dir / "data_efficiency_summary.csv"
+    summary.to_csv(summary_csv, index=False)
+    print(f"saved summary: {summary_csv}")
+
+    # Print a readable table: mean (±std) for key AUROC columns
+    print("\n=== Summary (mean ± std across seeds) ===")
+    display_cols = ["method", "train_size", "n_seeds"]
+    key_scores = [
+        ("lll",      "far_ood_mutual_information"),
+        ("lll",      "near_ood_mutual_information"),
+        ("map",      "far_ood_predictive_entropy"),
+        ("map",      "near_ood_predictive_entropy"),
+        ("ensemble", "far_ood_mutual_information"),
+        ("ensemble", "near_ood_mutual_information"),
+    ]
+    for method, score in key_scores:
+        mean_col = f"{score}_mean"
+        std_col  = f"{score}_std"
+        if mean_col in summary.columns:
+            display_cols += [mean_col, std_col]
+
+    avail = [c for c in display_cols if c in summary.columns]
+    print(summary[avail].to_string(index=False))
 
     print("\nGenerating plots...")
-    plot_auroc(df, plots_dir)
-    plot_sigma(df, plots_dir)
+    plot_auroc(summary, plots_dir)
+    plot_sigma(summary, plots_dir)
 
 
 if __name__ == "__main__":
