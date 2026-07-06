@@ -3,8 +3,9 @@
 Two phases:
     1. MAP training — delegated to the deterministic ``Trainer``.
     2. Laplace fit on the first convolutional layer (``conv1``) via
-       :class:`laplace.SubnetLaplace`; optional marginal-likelihood optimization
-       of the prior precision.
+       the :func:`laplace.Laplace` factory with ``subset_of_weights="subnetwork"``
+       (dispatches to :class:`laplace.SubnetLaplace` internally); optional
+       marginal-likelihood optimization of the prior precision.
 
 At predict time draws ``n_samples`` MC samples from the Gaussian posterior over
 the ``conv1`` weights and returns post-softmax probabilities, both averaged and
@@ -22,7 +23,7 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-from laplace import SubnetLaplace
+from laplace import Laplace
 from laplace.utils import ModuleNameSubnetMask
 from torch.utils.data import DataLoader
 
@@ -103,7 +104,9 @@ class FirstLayerLaplace(BayesianMethod):
         indices = subnet_mask.indices
         print(f"subnetwork_indices: {int(indices.numel())} parameters selected from '{module_name}'", flush=True)
 
-        self.la = SubnetLaplace(
+        # Use the Laplace() factory: with subset_of_weights="subnetwork" it
+        # dispatches to SubnetLaplace under the hood. Same pattern as LLL.
+        self.la = Laplace(
             self.model,
             likelihood="classification",
             subset_of_weights=subset,
