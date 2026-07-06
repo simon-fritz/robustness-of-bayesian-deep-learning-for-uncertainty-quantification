@@ -1,0 +1,24 @@
+# First-layer Laplace approximation (laplace-torch).
+# Two phases: (1) MAP training (delegates to the deterministic trainer);
+# (2) Laplace fit on the first conv layer's weights via SubnetLaplace.
+name: first_layer_laplace
+bayesian_layers: ["conv1"]
+
+# Phase 1: MAP training. Same fields as the deterministic method config.
+training:
+  optimizer: adam
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  epochs: 30
+  early_stopping_patience: 5
+  use_class_weights: true
+
+# Phase 2: Laplace approximation.
+# ResNet-18's conv1 has 3*64*7*7 = 9,408 parameters. A full Hessian would be
+# ~88M entries (~700 MB float32) — diag keeps it at ~37 KB, safe default.
+laplace:
+  subset_of_weights: subnetwork        # first-layer uses subnetwork mode
+  hessian_structure: diag              # full | kron | diag (diag recommended for conv1)
+  prior_precision_method: marglik      # marglik | CV | <float>
+  n_predictive_samples: 100            # MC samples drawn at predict time
+  first_layer_module: conv1            # torchvision ResNet's first conv attribute name

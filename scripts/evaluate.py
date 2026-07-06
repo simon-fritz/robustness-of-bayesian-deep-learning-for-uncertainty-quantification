@@ -180,8 +180,27 @@ def main() -> None:
         probs_samples, y, logit_mean, logit_var, logit_sigma = _laplace_samples(
             la, data.test_loader(), device, n_samples
         )
-        
-        
+
+    elif method_name == "first_layer_laplace":
+        model = _load_model(cfg, ckpt_path, device, data.metadata.num_classes, data.metadata.in_channels)
+        from laplace import Laplace
+        la_path = ckpt_path.with_suffix(".laplace.pt")
+        payload = torch.load(la_path, map_location=device, weights_only=False)
+        # SubnetLaplace requires subnetwork_indices at reload — fit() stashes
+        # them in the payload for exactly this reason.
+        la = Laplace(
+            model, likelihood="classification",
+            subset_of_weights=payload["subset_of_weights"],
+            hessian_structure=payload["hessian_structure"],
+            subnetwork_indices=payload["subnetwork_indices"].to(device),
+        )
+        la.load_state_dict(payload["state_dict"])
+        n_samples = int(args.n_samples or cfg.method.laplace.n_predictive_samples)
+        print(f"drawing {n_samples} predictive samples per test example...", flush=True)
+        probs_samples, y, logit_mean, logit_var, logit_sigma = _laplace_samples(
+            la, data.test_loader(), device, n_samples
+        )
+
     elif method_name == "deep_ensemble":
         # Discover ensemble member checkpoints in the same directory as the main checkpoint.
         ckpt_dir = ckpt_path.parent

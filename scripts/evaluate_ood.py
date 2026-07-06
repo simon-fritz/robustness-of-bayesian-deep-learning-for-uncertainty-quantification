@@ -106,6 +106,12 @@ def _collect(model, loader, device, *, method_name: str, predictor=None, n_sampl
             all_lm.append(res["logit_mean"].cpu())
             all_lv.append(res["logit_var"].cpu())
             all_ls.append(res["logit_sigma"].cpu())
+        elif method_name == "first_layer_laplace":
+            res = predictor.predict_modes(x.to(device), n_samples=n_samples, modes=("mc", "glm"))
+            p = res["softmax_samples"].cpu()
+            all_lm.append(res["logit_mean"].cpu())
+            all_lv.append(res["logit_var"].cpu())
+            all_ls.append(res["logit_sigma"].cpu())
         elif method_name == "deep_ensemble":
             batch_probs = [torch.softmax(m(x.to(device)), dim=-1).cpu() for m in model]
             p = torch.stack(batch_probs, dim=0)
@@ -362,6 +368,26 @@ def main() -> None:
         la.load_state_dict(payload["state_dict"])
         # Wrap the fitted Laplace so we can use predict_modes (mc + glm).
         predictor = LastLayerLaplace(device=device)
+        predictor.model = model
+        predictor.la = la
+        
+    elif method_name == "first_layer_laplace":
+        from laplace import Laplace
+
+        from bnn_medmnist.methods.first_layer_laplace import FirstLayerLaplace
+        la_path = ckpt_path.with_suffix(".laplace.pt")
+        payload = torch.load(la_path, map_location=device, weights_only=False)
+        # SubnetLaplace requires subnetwork_indices at reload — fit() stashes
+        # them in the payload for exactly this reason.
+        la = Laplace(
+            model, likelihood="classification",
+            subset_of_weights=payload["subset_of_weights"],
+            hessian_structure=payload["hessian_structure"],
+            subnetwork_indices=payload["subnetwork_indices"].to(device),
+        )
+        la.load_state_dict(payload["state_dict"])
+        # Wrap the fitted Laplace so we can use predict_modes (mc + glm).
+        predictor = FirstLayerLaplace(device=device)
         predictor.model = model
         predictor.la = la
 
