@@ -16,6 +16,9 @@ cd "$SLURM_SUBMIT_DIR"
 # Avoid TensorBoard event writes on the shared network mount (Errno 5 / EIO).
 export TENSORBOARD_DIR=off
 
+# Laplace fit uses torch.func.jacrev with vmap — reduce CUDA memory fragmentation.
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
 CFG=configs/experiment/pneumonia_resnet18_first_layer_laplace.yaml
 python scripts/train.py --config "$CFG"
 

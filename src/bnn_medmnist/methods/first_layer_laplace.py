@@ -101,8 +101,15 @@ class FirstLayerLaplace(BayesianMethod):
         # produces flat parameter indices consumed by SubnetLaplace.
         subnet_mask = ModuleNameSubnetMask(self.model, module_names=[module_name])
         subnet_mask.select(train_loader)
-        indices = subnet_mask.indices
-        print(f"subnetwork_indices: {int(indices.numel())} parameters selected from '{module_name}'", flush=True)
+        raw_indices = subnet_mask.indices
+        # SubnetLaplace strictly requires a non-empty 1-D torch.LongTensor.
+        # ModuleNameSubnetMask can return int32 / non-flat tensors — cast explicitly.
+        indices = torch.as_tensor(raw_indices, dtype=torch.long).flatten().cpu()
+        print(
+            f"subnetwork_indices: {int(indices.numel())} parameters selected from "
+            f"'{module_name}' (dtype={indices.dtype}, shape={tuple(indices.shape)})",
+            flush=True,
+        )
 
         # Use the Laplace() factory: with subset_of_weights="subnetwork" it
         # dispatches to SubnetLaplace under the hood. Same pattern as LLL.
@@ -113,7 +120,22 @@ class FirstLayerLaplace(BayesianMethod):
             hessian_structure=hess,
             subnetwork_indices=indices,
         )
-        self.la.fit(train_loader)
+
+        # torch.func.jacrev in laplace-torch computes the FULL-network Jacobian
+        # even for subnetwork Laplace (only the sub-slice is kept afterwards).
+        # For a Conv2d subnetwork on ResNet-18 at 224x224, batch_size=128 blows
+        # past 40 GB GPU memory. Rebuild the loader with a small fit-batch and
+        # keep the original training batch for the MAP phase.
+        fit_batch = int(getattr(cfg, "fit_batch_size", 16))
+        laplace_loader = DataLoader(
+            train_loader.dataset,
+            batch_size=fit_batch,
+            shuffle=False,
+            num_workers=getattr(train_loader, "num_workers", 0),
+            pin_memory=getattr(train_loader, "pin_memory", False),
+        )
+        print(f"Laplace fit: batch_size={fit_batch} (MAP was {train_loader.batch_size})", flush=True)
+        self.la.fit(laplace_loader)
 
         if isinstance(prior_method, str):
             try:

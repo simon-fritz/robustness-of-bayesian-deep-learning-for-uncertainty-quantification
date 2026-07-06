@@ -22,3 +22,4 @@ laplace:
   prior_precision_method: marglik      # marglik | CV | <float>
   n_predictive_samples: 100            # MC samples drawn at predict time
   first_layer_module: conv1            # torchvision ResNet's first conv attribute name
+  fit_batch_size: 16                   # Laplace fit uses ~3 GB/sample for ResNet-18 Jacobian; small batch mandatory
