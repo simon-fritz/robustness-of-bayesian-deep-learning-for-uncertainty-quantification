@@ -187,12 +187,13 @@ def main() -> None:
         la_path = ckpt_path.with_suffix(".laplace.pt")
         payload = torch.load(la_path, map_location=device, weights_only=False)
         # SubnetLaplace requires subnetwork_indices at reload — fit() stashes
-        # them in the payload for exactly this reason.
+        # them in the payload. The library's isinstance check demands a CPU
+        # torch.LongTensor (NOT torch.cuda.LongTensor), so keep on CPU.
         la = Laplace(
             model, likelihood="classification",
             subset_of_weights=payload["subset_of_weights"],
             hessian_structure=payload["hessian_structure"],
-            subnetwork_indices=payload["subnetwork_indices"].to(device),
+            subnetwork_indices=payload["subnetwork_indices"].cpu().long(),
         )
         la.load_state_dict(payload["state_dict"])
         n_samples = int(args.n_samples or cfg.method.laplace.n_predictive_samples)

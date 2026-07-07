@@ -269,21 +269,28 @@ class FirstLayerLaplace(BayesianMethod):
         """
         if self.la is None:
             raise RuntimeError("fit must be called before sigma_summary.")
-        cov = self.la.posterior_covariance
-        if not torch.is_tensor(cov):
-            cov = torch.as_tensor(cov)
-        cov = cov.detach().cpu()
+        # DiagSubnetLaplace exposes posterior_variance (vector) instead of
+        # posterior_covariance. Full/kron variants expose either.
+        if hasattr(self.la, "posterior_variance") and self.la.posterior_variance is not None:
+            var = self.la.posterior_variance
+        elif hasattr(self.la, "posterior_covariance") and self.la.posterior_covariance is not None:
+            var = self.la.posterior_covariance
+        else:
+            raise RuntimeError("Laplace object exposes neither posterior_variance nor posterior_covariance.")
+        if not torch.is_tensor(var):
+            var = torch.as_tensor(var)
+        var = var.detach().cpu()
 
-        if cov.dim() == 1:
-            # Diagonal-only representation (hessian_structure="diag").
-            diag = cov
+        if var.dim() == 1:
+            # Diagonal-only representation.
+            diag = var
             sigma_norm = float(torch.norm(diag, p=2))
-        elif cov.dim() == 2:
-            diag = torch.diagonal(cov)
-            sigma_norm = float(torch.norm(cov, p="fro"))
+        elif var.dim() == 2:
+            diag = torch.diagonal(var)
+            sigma_norm = float(torch.norm(var, p="fro"))
         else:
             raise RuntimeError(
-                f"unexpected posterior_covariance shape {tuple(cov.shape)}"
+                f"unexpected posterior_variance shape {tuple(var.shape)}"
             )
 
         result: dict = {
