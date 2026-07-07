@@ -197,10 +197,20 @@ def main() -> None:
         )
         la.load_state_dict(payload["state_dict"])
         n_samples = int(args.n_samples or cfg.method.laplace.n_predictive_samples)
-        print(f"drawing {n_samples} predictive samples per test example...", flush=True)
-        probs_samples, y, logit_mean, logit_var, logit_sigma = _laplace_samples(
-            la, data.test_loader(), device, n_samples
-        )
+        # GLM (_glm_predictive_distribution) uses the same expensive
+        # torch.func.jacrev as the fit — hours on the test set. Skip it: MC
+        # samples only, no analytical logit moments (identical treatment to
+        # deep_ensemble). logit_variance scores end up N/A downstream.
+        print(f"drawing {n_samples} MC predictive samples (GLM skipped for Conv2d subnet)...", flush=True)
+        all_p, all_y = [], []
+        for x, y_b in data.test_loader():
+            xb = x.to(device)
+            s = la.predictive_samples(xb, pred_type="nn", n_samples=n_samples).cpu()
+            all_p.append(s)
+            all_y.append(y_b)
+        probs_samples = torch.cat(all_p, dim=1)
+        y = torch.cat(all_y)
+        logit_mean = logit_var = logit_sigma = None
 
     elif method_name == "deep_ensemble":
         # Discover ensemble member checkpoints in the same directory as the main checkpoint.
