@@ -107,11 +107,11 @@ def _collect(model, loader, device, *, method_name: str, predictor=None, n_sampl
             all_lv.append(res["logit_var"].cpu())
             all_ls.append(res["logit_sigma"].cpu())
         elif method_name == "first_layer_laplace":
-            res = predictor.predict_modes(x.to(device), n_samples=n_samples, modes=("mc", "glm"))
+            # GLM predict for a Conv2d subnetwork triggers the same expensive
+            # torch.func.jacrev used at fit time — on 17k OOD samples that
+            # would take hours. Use MC only; logit-variance scores are N/A.
+            res = predictor.predict_modes(x.to(device), n_samples=n_samples, modes=("mc",))
             p = res["softmax_samples"].cpu()
-            all_lm.append(res["logit_mean"].cpu())
-            all_lv.append(res["logit_var"].cpu())
-            all_ls.append(res["logit_sigma"].cpu())
         elif method_name == "deep_ensemble":
             batch_probs = [torch.softmax(m(x.to(device)), dim=-1).cpu() for m in model]
             p = torch.stack(batch_probs, dim=0)

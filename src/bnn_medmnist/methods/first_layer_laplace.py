@@ -123,19 +123,40 @@ class FirstLayerLaplace(BayesianMethod):
 
         # torch.func.jacrev in laplace-torch computes the FULL-network Jacobian
         # even for subnetwork Laplace (only the sub-slice is kept afterwards).
-        # For a Conv2d subnetwork on ResNet-18 at 224x224, batch_size=128 blows
-        # past 40 GB GPU memory. Rebuild the loader with a small fit-batch and
-        # keep the original training batch for the MAP phase.
+        # For a Conv2d subnetwork on ResNet-18 at 224x224 that is both memory-
+        # heavy (bs=128 → OOM) and slow (~1h on the full training set).
+        #
+        # Two mitigations, both configurable:
+        #   * fit_batch_size:   reduce batch size for the fit only (default 16).
+        #   * fit_max_samples:  subsample the training data for the fit
+        #                       (default 512). Laplace posteriors from ~500
+        #                       samples are effectively identical to the full
+        #                       fit for our purposes and take minutes not hours.
+        from torch.utils.data import Subset
+        max_fit = int(getattr(cfg, "fit_max_samples", 512))
+        full_ds = train_loader.dataset
+        if len(full_ds) > max_fit:
+            g = torch.Generator().manual_seed(0)
+            perm = torch.randperm(len(full_ds), generator=g)[:max_fit].tolist()
+            fit_dataset = Subset(full_ds, perm)
+        else:
+            fit_dataset = full_ds
+
         fit_batch = int(getattr(cfg, "fit_batch_size", 16))
         laplace_loader = DataLoader(
-            train_loader.dataset,
+            fit_dataset,
             batch_size=fit_batch,
             shuffle=False,
             num_workers=getattr(train_loader, "num_workers", 0),
             pin_memory=getattr(train_loader, "pin_memory", False),
         )
-        print(f"Laplace fit: batch_size={fit_batch} (MAP was {train_loader.batch_size})", flush=True)
+        print(
+            f"Laplace fit: {len(fit_dataset)}/{len(full_ds)} samples "
+            f"@ batch_size={fit_batch} (MAP was {train_loader.batch_size})",
+            flush=True,
+        )
         self.la.fit(laplace_loader)
+        print("Laplace fit: done", flush=True)
 
         if isinstance(prior_method, str):
             try:
