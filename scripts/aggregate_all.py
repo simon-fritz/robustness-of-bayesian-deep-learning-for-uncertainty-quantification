@@ -101,7 +101,7 @@ def _read_ood_auroc(run_dir: Path, scenario: str, ood_dataset: str, score: str) 
 
 
 def _read_id_metrics(run_dir: Path) -> dict:
-    p = run_dir / "metrics.json"
+    p = run_dir / "test_metrics.json"
     if not p.exists():
         return {}
     try:
@@ -194,7 +194,7 @@ def print_summary(summary: pd.DataFrame) -> None:
             row["id_acc"] = f"{r['id_accuracy_mean']:.3f}" if "id_accuracy_mean" in r and not pd.isna(r.get("id_accuracy_mean", float("nan"))) else "—"
             row["far_OOD"] = _fmt("far_ood")
             row["near_OOD"] = _fmt("near_ood")
-            if "long_tail" in group or any(f"long_tail_{score}_mean" in r.index for _ in [1]):
+            if group == "longtail":
                 row["long_tail"] = _fmt("long_tail")
             rows.append(row)
 
