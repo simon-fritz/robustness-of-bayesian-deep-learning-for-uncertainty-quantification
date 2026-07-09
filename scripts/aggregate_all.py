@@ -63,7 +63,7 @@ EXPERIMENTS = [
 SCENARIO_DATASET = {
     "far_ood":   FAR_OOD_DATASET,
     "near_ood":  NEAR_OOD_DATASET,
-    "long_tail": "pneumoniamnist",
+    "long_tail": "tail_0",
 }
 
 # All uncertainty scores each method can produce
