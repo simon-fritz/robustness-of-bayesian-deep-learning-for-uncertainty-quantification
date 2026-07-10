@@ -17,7 +17,7 @@ cd "$SLURM_SUBMIT_DIR"
 # Avoid TensorBoard event writes on the shared network mount (Errno 5 / EIO).
 export TENSORBOARD_DIR=off
 
-CFG=configs/experiment/training/pneumonia_deep_ensemble.yaml
+CFG=configs/experiment/training/pneumonia_resnet18_deep_ensemble.yaml
 python scripts/train.py --config "$CFG"
 
 RUN_DIR=$(ls -td outputs/pneumonia_deep_ensemble/*/ | head -1)

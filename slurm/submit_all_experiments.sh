@@ -16,7 +16,7 @@ SEEDS=(0 1 2 3 4)
 FULL_DATA_CONFIGS=(
     configs/experiment/pneumonia_resnet18_lll.yaml
     configs/experiment/pneumonia_resnet18_baseline.yaml
-    configs/experiment/training/pneumonia_deep_ensemble.yaml
+    configs/experiment/training/pneumonia_resnet18_deep_ensemble.yaml
 )
 
 # Long-tail experiments (train + long_tail-OOD + far-OOD + near-OOD)

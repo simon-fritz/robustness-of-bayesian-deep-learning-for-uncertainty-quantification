@@ -46,7 +46,7 @@ export DATA_ROOT=/some/shared/path
 | Scenario | Description | OOD evaluations |
 |---|---|---|
 | **full_data** | Balanced full training set | far-OOD (BloodMNIST), near-OOD (OrganAMNIST) |
-| **longtail** | 2% of "normal" class kept (class_subsampling) | long-tail + far-OOD + near-OOD |
+| **longtail** | 2% of "normal" class kept (class_subsampling) | tail-class-as-OOD + far-OOD + near-OOD |
 | **data_eff** | Training capped to 100 / 1000 / 10 000 examples | far-OOD + near-OOD |
 
 ---
@@ -112,7 +112,7 @@ sbatch slurm/train_longtail_generic.sbatch    configs/experiment/pneumonia_resne
 |---|---|
 | `configs/experiment/pneumonia_resnet18_lll.yaml` | LLL |
 | `configs/experiment/pneumonia_resnet18_baseline.yaml` | MAP |
-| `configs/experiment/training/pneumonia_deep_ensemble.yaml` | Ensemble |
+| `configs/experiment/training/pneumonia_resnet18_deep_ensemble.yaml` | Ensemble |
 
 **Long-tail (2% normal class):**
 

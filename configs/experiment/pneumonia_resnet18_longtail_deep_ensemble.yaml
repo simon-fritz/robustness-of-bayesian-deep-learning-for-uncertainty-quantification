@@ -1,6 +1,6 @@
 # Experiment: Deep Ensemble on a pre-trained ResNet-18, PneumoniaMNIST with
 # class 0 ("normal") heavily subsampled — long-tail counterpart to
-# pneumonia_deep_ensemble for the long_tail OOD scenario.
+# pneumonia_resnet18_deep_ensemble for the long_tail OOD scenario.
 #   0 -> "normal"   (under-represented at training time)
 #   1 -> "pneumonia"
 defaults:

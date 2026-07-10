@@ -79,7 +79,7 @@ the easy shift, and OOD detection didn't move on the hard shift.
 
 This is the most important observation in this run.
 
-Both runs use the same `pneumonia_deep_ensemble.yaml`: same data, model,
+Both runs use the same `pneumonia_resnet18_deep_ensemble.yaml`: same data, model,
 optimizer, class-weighting, `n_members=5`, `seed=42`. The only behavioral change
 is in `DeepEnsemble.fit`: each member now constructs a fresh `DataLoader` and
 reseeds the RNG via `set_seed(base_seed + i)` before training, instead of
