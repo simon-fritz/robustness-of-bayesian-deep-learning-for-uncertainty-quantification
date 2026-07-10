@@ -1,0 +1,61 @@
+timestamp: 2026-07-09T16:27:01
+git_commit: a82e80bcde2a4e5ea7fe459bef409900c1e7302d
+slurm_job_id: 177256
+hostname: atlas
+cwd: /vol/miltank/users/ahra/robustness-of-bayesian-deep-learning-for-uncertainty-quantification
+run_dir: /vol/miltank/users/ahra/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/outputs/pneumonia_resnet18_longtail_normal2pct_de/20260709_162701
+checkpoint: /vol/miltank/users/ahra/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/checkpoints/pneumonia_resnet18_longtail_normal2pct_de/20260709_162701/best.pt
+tensorboard: None
+config:
+data:
+  name: pneumoniamnist
+  flag: pneumoniamnist
+  num_classes: 2
+  in_channels: 1
+  image_size: 28
+  root: ./data
+  download: true
+  batch_size: 128
+  num_workers: 4
+  class_subsampling:
+    0: 0.02
+  image_transform:
+    resize: 224
+    expand_channels_to: 3
+    normalize:
+      mean:
+      - 0.485
+      - 0.456
+      - 0.406
+      std:
+      - 0.229
+      - 0.224
+      - 0.225
+model:
+  name: pretrained_resnet18
+  weights: imagenet
+  freeze_backbone: false
+  num_classes: ???
+  input_channels: 3
+  input_resolution: 224
+method:
+  name: deep_ensemble
+  bayesian_layers: []
+  n_samples: 1
+  n_members: 5
+  training:
+    optimizer: adam
+    lr: 0.0001
+    weight_decay: 0.0001
+    epochs: 15
+    early_stopping_patience: 5
+    use_class_weights: true
+    use_amp: false
+experiment_name: pneumonia_resnet18_longtail_normal2pct_de
+run_name: pneumonia_resnet18_longtail_normal2pct_de
+seed: 4
+ood_datasets:
+- bloodmnist
+- organamnist
+output_dir: outputs
+checkpoint_dir: checkpoints
