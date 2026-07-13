@@ -330,6 +330,19 @@ def main() -> None:
     scenario = str(ood_cfg.scenario)
     _assert_training_matches(run_cfg, ood_cfg)
 
+    # First-layer (subnetwork) Laplace runs a jacrev over conv1 for the GLM
+    # predictive; that jacrev vmaps batch*classes backward passes through the
+    # whole net, so peak GPU memory scales ~ batch*activations. Cap the ID
+    # loader batch HERE, before it is built — build_ood_loaders uses the ID
+    # loader's own batch for the ID pass and only applies the batch arg to the
+    # OOD loaders, so capping only that arg (below) left the ID pass at 128.
+    fll_eval_batch: int | None = None
+    if method_name == "first_layer_laplace":
+        fll_eval_batch = int(
+            args.eval_batch_size or run_cfg.method.laplace.get("eval_batch_size", 4)
+        )
+        run_cfg.data.batch_size = fll_eval_batch
+
     ckpt_path = Path(args.checkpoint) if args.checkpoint else Path(
         (run_dir / "checkpoint_path.txt").read_text().strip()
     )
@@ -377,15 +390,10 @@ def main() -> None:
 
     pair = ood_pair_from_cfg(ood_cfg)
     batch_size = int(ood_cfg.get("batch_size", 256))
-    # First-layer (subnetwork) Laplace runs a jacrev over conv1 for the GLM
-    # predictive; that jacrev vmaps batch*classes backward passes through the
-    # whole net, so peak GPU memory scales ~ batch*activations (batch 16 alone
-    # needs ~43 GB on ResNet18@224). Cap the loader batch small; it drives both
-    # the ID and OOD passes via build_ood_loaders. CLI flag wins over config so
-    # already-fitted runs can be re-evaluated safely.
-    if method_name == "first_layer_laplace":
-        cap = int(args.eval_batch_size or run_cfg.method.laplace.get("eval_batch_size", 4))
-        batch_size = min(batch_size, cap)
+    # Apply the same cap to the OOD loaders (the ID loader was already capped
+    # via run_cfg.data.batch_size above).
+    if fll_eval_batch is not None:
+        batch_size = min(batch_size, fll_eval_batch)
         print(f"[evaluate_ood] first_layer_laplace eval batch = {batch_size}", flush=True)
     num_workers = int(ood_cfg.get("num_workers", 4))
     data_root = str(run_cfg.data.get("root", "./data"))
