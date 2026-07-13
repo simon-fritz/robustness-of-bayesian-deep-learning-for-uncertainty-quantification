@@ -1,6 +1,7 @@
 # Approach: First-Layer Laplace
 
-> Status: initial write-up — will be extended as results come in.
+> Status: implemented and evaluated (PneumoniaMNIST / ResNet-18, seed 42).
+> Results below; still to sweep more seeds and compare against LLL / ensembles.
 
 ## Idea
 
@@ -47,6 +48,13 @@ linearizes around the MAP, preserving accuracy while still propagating the
 posterior logit variance for uncertainty. Set via `method.laplace.pred_type`
 (`glm` for first-layer, `nn` for last-layer whose posterior is well-constrained).
 
+**Eval-time memory.** The GLM predictive runs the same conv1 jacrev as the fit,
+which vmaps `batch × classes` backward passes through the whole net, so peak GPU
+memory scales ~ `batch × activations` (batch 16 alone needs ~43 GB on
+ResNet18@224). Evaluation caps the loader batch to `laplace.eval_batch_size` (4),
+overridable per-run with `--eval-batch-size`. This is separate from
+`fit_batch_size`; both are memory knobs for the same jacrev.
+
 ## Running it
 
 ```bash
@@ -67,8 +75,37 @@ Local smoke test (SmallCNN, CPU):
 python scripts/train.py --config configs/experiment/training/pneumonia_fll.yaml --smoke
 ```
 
+## Results (PneumoniaMNIST / ResNet-18, seed 42)
+
+GLM predictive, `eval_batch_size=4`. Full metrics in each run's
+`test_metrics.json` / `ood/<scenario>/ood_metrics.json`.
+
+**In-distribution (test):**
+
+| run       | accuracy | balanced acc | AUROC | ECE   |
+|-----------|---------:|-------------:|------:|------:|
+| standard  |    0.907 |        0.878 | 0.984 | 0.089 |
+| long-tail |    0.700 |        0.601 | 0.890 | 0.132 |
+
+The long-tail run subsamples the "normal" class to 2% (24 train images), so the
+tail class — not the method — drives the drop in balanced accuracy / calibration.
+
+**OOD detection (AUROC), best score per family:**
+
+| scenario                     | predictive entropy | expected entropy (aleatoric) | mutual info (epistemic) | logit variance (Laplace) |
+|------------------------------|-------------------:|-----------------------------:|------------------------:|-------------------------:|
+| near-OOD (organamnist)       |              0.831 |                    **0.898** |                   0.734 |                    0.571 |
+| long-tail (under-rep. class) |              0.882 |                        0.672 |                   0.910 |                **0.929** |
+
+**Takeaway.** The ranking flips between the two shifts. On semantic **near-OOD**,
+aleatoric/predictive-entropy leads and conv1's analytical logit variance is
+weakest (0.57). On **long-tail data-scarcity**, the *epistemic* signals win —
+logit variance 0.93, mutual information 0.91 — exactly what a Bayesian treatment
+of the feature extractor should flag. So first-layer epistemic uncertainty
+tracks *how much data* was seen more than *how semantically far* an input is.
+
 ## Open / planned extensions
 
-- Results tables (ID, long-tail, near/far OOD) vs. baseline / LLL / ensembles.
+- More seeds; head-to-head vs. baseline / LLL / ensembles on the same table.
 - Other Bayesian extents (first block `layer1`, first+last combined).
 - `hessian_structure: diag` fallback if the full fit gets slow at scale.
