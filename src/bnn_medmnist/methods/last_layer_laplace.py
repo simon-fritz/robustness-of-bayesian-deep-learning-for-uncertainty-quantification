@@ -25,6 +25,12 @@ from .base import BayesianMethod
 class LastLayerLaplace(BayesianMethod):
     """MAP training + last-layer Laplace posterior."""
 
+    #: Default MC predictive type. ``"nn"`` samples network weights from the
+    #: posterior; fine for the last layer whose posterior is well-constrained.
+    #: Subclasses over wide/prior-dominated posteriors (e.g. first-layer) should
+    #: override to ``"glm"`` — see :class:`FirstLayerLaplace`.
+    _default_pred_type: str = "nn"
+
     def __init__(
         self,
         train_cfg=None,
@@ -36,6 +42,11 @@ class LastLayerLaplace(BayesianMethod):
     ) -> None:
         n_predictive = int(getattr(laplace_cfg, "n_predictive_samples", 100))
         super().__init__(bayesian_layers=["fc"], n_samples=n_predictive)
+        # Predictive type: "glm" (linearized, function-space) or "nn" (weight
+        # sampling). Config may override; else the class default applies.
+        self.pred_type = str(
+            getattr(laplace_cfg, "pred_type", None) or self._default_pred_type
+        )
         self.train_cfg = train_cfg
         self.laplace_cfg = laplace_cfg
         self.ckpt_path = Path(ckpt_path) if ckpt_path is not None else None
@@ -126,7 +137,11 @@ class LastLayerLaplace(BayesianMethod):
             raise RuntimeError("LastLayerLaplace.fit must be called before predict.")
         n = int(n_samples) if n_samples is not None else self.n_samples
         x = x.to(self.device)
-        return self.la.predictive_samples(x, pred_type="nn", n_samples=n)
+        # detach: the GLM predictive builds an autograd graph (enable_grad); not
+        # detaching leaks GPU memory across eval batches on large OOD sets.
+        return self.la.predictive_samples(
+            x, pred_type=self.pred_type, n_samples=n
+        ).detach()
 
     @torch.no_grad()
     def glm_logit_distribution(
@@ -143,7 +158,10 @@ class LastLayerLaplace(BayesianMethod):
             raise RuntimeError("LastLayerLaplace.fit must be called before predict.")
         x = x.to(self.device)
         f_mu, f_var = self.la._glm_predictive_distribution(x, diagonal_output=True)
-        return f_mu, f_var
+        # detach: _glm_predictive_distribution runs under enable_grad, so its
+        # outputs carry the autograd graph; keeping it leaks GPU memory across
+        # eval batches (OOM on large OOD sets).
+        return f_mu.detach(), f_var.detach()
 
     @torch.no_grad()
     def glm_logit_sigma(self, x: torch.Tensor) -> torch.Tensor:

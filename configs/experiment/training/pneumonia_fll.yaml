@@ -1,0 +1,22 @@
+# Experiment: First-Layer Laplace on PneumoniaMNIST (SmallCNN).
+# Cheap local/CPU counterpart to pneumonia_resnet18_fll — mainly for smoke
+# testing the subnetwork-Laplace pipeline (train.py --smoke).
+defaults:
+  - /data: pneumoniamnist
+  - /model: small_cnn
+  - /method: first_layer_laplace
+  - _self_
+
+experiment_name: pneumonia_fll
+run_name: pneumonia_fll
+seed: 42
+
+# OOD sources to evaluate against (resolved by data/ood_pairs.py).
+ood_datasets: [bloodmnist, organamnist]
+
+# SmallCNN's first conv lives inside a Sequential block -> dotted path.
+method:
+  bayesian_layers: ["layer1.0"]
+
+output_dir: outputs
+checkpoint_dir: checkpoints

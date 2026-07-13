@@ -1,0 +1,41 @@
+# Experiment: First-Layer Laplace on a pre-trained ResNet-18, PneumoniaMNIST
+# with class 0 ("normal") heavily subsampled — long-tail counterpart to
+# pneumonia_resnet18_fll, mirroring pneumonia_resnet18_longtail_lll.
+#   0 -> "normal"   (under-represented at training time)
+#   1 -> "pneumonia"
+defaults:
+  - /data: pneumoniamnist
+  - /model: resnet18
+  - /method: first_layer_laplace
+  - _self_
+
+experiment_name: pneumonia_resnet18_longtail_normal2pct_fll
+run_name: pneumonia_resnet18_longtail_normal2pct_fll
+seed: 42
+
+# OOD sources to evaluate against (resolved by data/ood_pairs.py).
+ood_datasets: [bloodmnist, organamnist]
+
+# ImageNet-style preprocessing required by the pretrained ResNet-18, plus the
+# long-tail class subsampling.
+data:
+  class_subsampling: {0: 0.02}  # keep 2% of "normal"
+  image_transform:
+    resize: 224
+    expand_channels_to: 3
+    normalize:
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+
+method:
+  # Trains its own MAP model (self-contained). To instead reuse an existing
+  # same-seed MAP checkpoint and skip the fine-tune, add
+  # `reuse_map_from: pneumonia_resnet18_longtail_normal2pct_lll` or point
+  # `map_checkpoint:` at an explicit readable best.pt.
+  training:
+    lr: 1.0e-4
+    epochs: 15
+    use_amp: false      # opt-in CUDA mixed precision
+
+output_dir: outputs
+checkpoint_dir: checkpoints
