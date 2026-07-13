@@ -100,7 +100,7 @@ def _collect(model, loader, device, *, method_name: str, predictor=None, n_sampl
         all_y.append(y.cpu() if isinstance(y, torch.Tensor) else torch.as_tensor(y))
         if method_name == "deterministic":
             p = torch.softmax(model(x.to(device)), dim=-1).cpu().unsqueeze(0)
-        elif method_name == "last_layer_laplace":
+        elif method_name in ("last_layer_laplace", "first_layer_laplace"):
             res = predictor.predict_modes(x.to(device), n_samples=n_samples, modes=("mc", "glm"))
             p = res["softmax_samples"].cpu()
             all_lm.append(res["logit_mean"].cpu())
@@ -348,25 +348,38 @@ def main() -> None:
 
     predictor = None
     n_samples = int(args.n_samples or ood_cfg.get("n_predictive_samples", 100))
-    if method_name == "last_layer_laplace":
-        from laplace import Laplace
-
-        from bnn_medmnist.methods.last_layer_laplace import LastLayerLaplace
+    if method_name in ("last_layer_laplace", "first_layer_laplace"):
         la_path = ckpt_path.with_suffix(".laplace.pt")
-        payload = torch.load(la_path, map_location=device, weights_only=False)
-        la = Laplace(
-            model, likelihood="classification",
-            subset_of_weights=payload["subset_of_weights"],
-            hessian_structure=payload["hessian_structure"],
-        )
-        la.load_state_dict(payload["state_dict"])
+        if method_name == "first_layer_laplace":
+            # Subnetwork Laplace: the classmethod re-applies the requires_grad
+            # pattern + indices before load_state_dict.
+            from bnn_medmnist.methods.first_layer_laplace import FirstLayerLaplace
+            la = FirstLayerLaplace.load_laplace(model, la_path, device)
+            predictor = FirstLayerLaplace(device=device)
+        else:
+            from laplace import Laplace
+
+            from bnn_medmnist.methods.last_layer_laplace import LastLayerLaplace
+            payload = torch.load(la_path, map_location=device, weights_only=False)
+            la = Laplace(
+                model, likelihood="classification",
+                subset_of_weights=payload["subset_of_weights"],
+                hessian_structure=payload["hessian_structure"],
+            )
+            la.load_state_dict(payload["state_dict"])
+            predictor = LastLayerLaplace(device=device)
         # Wrap the fitted Laplace so we can use predict_modes (mc + glm).
-        predictor = LastLayerLaplace(device=device)
         predictor.model = model
         predictor.la = la
 
     pair = ood_pair_from_cfg(ood_cfg)
     batch_size = int(ood_cfg.get("batch_size", 256))
+    # First-layer (subnetwork) Laplace runs a jacrev over conv1 for the GLM
+    # predictive; its peak memory scales with the eval batch (same batch * p^2
+    # cost as the fit), so cap the (larger) OOD batch to avoid an OOM. This
+    # loader batch drives both the ID and OOD passes via build_ood_loaders.
+    if method_name == "first_layer_laplace":
+        batch_size = min(batch_size, int(run_cfg.method.laplace.get("eval_batch_size", 16)))
     num_workers = int(ood_cfg.get("num_workers", 4))
     data_root = str(run_cfg.data.get("root", "./data"))
     id_loader_t, ood_loaders = build_ood_loaders(

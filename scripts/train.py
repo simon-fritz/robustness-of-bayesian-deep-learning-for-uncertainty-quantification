@@ -17,6 +17,7 @@ from omegaconf import OmegaConf
 
 from bnn_medmnist.data.medmnist_loader import MedMNISTLoader
 from bnn_medmnist.methods.deterministic import Deterministic
+from bnn_medmnist.methods.first_layer_laplace import FirstLayerLaplace
 from bnn_medmnist.methods.last_layer_laplace import LastLayerLaplace
 from bnn_medmnist.methods.deep_ensemble import DeepEnsemble
 from bnn_medmnist.models import build_model
@@ -85,6 +86,79 @@ def _assert_input_shape(model_cfg, data) -> None:
           f"{produced_r}x{produced_r}", flush=True)
 
 
+def _readable_file(path: Path) -> bool:
+    """``path`` exists, is a file, and is readable by us.
+
+    ``Path.is_file()`` *raises* ``PermissionError`` when a parent directory is
+    unreadable (e.g. a teammate's checkpoint referenced from a shared repo),
+    so it can't be used as a plain boolean — hence the explicit guard. Also
+    checks ``os.access`` so we don't return a path we can't actually open.
+    """
+    try:
+        return path.is_file() and os.access(path, os.R_OK)
+    except OSError:
+        return False
+
+
+def _resolve_map_checkpoint(cfg) -> Path | None:
+    """Resolve a reusable MAP checkpoint for post-hoc methods.
+
+    Two config keys on ``cfg.method`` (both optional):
+      * ``map_checkpoint`` — explicit path to a ``best.pt``.
+      * ``reuse_map_from`` — run name under ``outputs/``; the newest finished
+        run whose saved config matches ``cfg.seed`` *and whose checkpoint we
+        can actually read* is used (its ``checkpoint_path.txt`` points at the
+        checkpoint). Runs whose checkpoint is missing or unreadable (e.g. a
+        teammate's run committed into a shared ``outputs/`` but stored under
+        their private home) are skipped, not fatal.
+
+    Errors out loudly rather than silently retraining — remove the key from
+    the config if retraining is intended.
+    """
+    explicit = cfg.method.get("map_checkpoint", None)
+    if explicit:
+        ckpt = Path(explicit).expanduser()
+        if not _readable_file(ckpt):
+            raise SystemExit(
+                f"[train] map_checkpoint={ckpt} does not exist or is unreadable."
+            )
+        return ckpt
+
+    source = cfg.method.get("reuse_map_from", None)
+    if not source:
+        return None
+    seed = int(cfg.seed)
+    root = PACKAGE_ROOT / "outputs" / str(source)
+    skipped: list[str] = []
+    # Newest timestamp first, so re-runs pick the latest checkpoint per seed.
+    for cfg_file in sorted(root.glob("*/config.yaml"), reverse=True):
+        try:
+            run_cfg = OmegaConf.load(cfg_file)
+            if int(run_cfg.seed) != seed:
+                continue
+            ckpt_file = cfg_file.parent / "checkpoint_path.txt"
+            if not _readable_file(ckpt_file):
+                continue  # run crashed before saving, or pointer unreadable
+            ckpt = Path(ckpt_file.read_text().strip())
+        except OSError:  # unreadable run dir / pointer -> skip this candidate
+            continue
+        if _readable_file(ckpt):
+            print(f"[train] reuse_map_from={source}: found seed={seed} "
+                  f"checkpoint at {ckpt}", flush=True)
+            return ckpt
+        skipped.append(str(ckpt))
+    hint = ""
+    if skipped:
+        hint = (" Skipped matching runs whose checkpoint was missing/unreadable"
+                f" (e.g. {skipped[0]}) — likely another user's run in a shared"
+                " outputs/ dir.")
+    raise SystemExit(
+        f"[train] reuse_map_from={source}: no readable seed={seed} checkpoint "
+        f"under {root}.{hint} Train the MAP model first, point map_checkpoint "
+        f"at an explicit path, or remove the key to retrain from scratch."
+    )
+
+
 def _build_method(cfg, data, ckpt_path: Path, tb_dir: Path):
     name = str(cfg.method.get("name", "deterministic")).lower()
     train_cfg = _training_block(cfg.method)
@@ -103,6 +177,13 @@ def _build_method(cfg, data, ckpt_path: Path, tb_dir: Path):
         return LastLayerLaplace(
             train_cfg=train_cfg, laplace_cfg=cfg.method.laplace,
             ckpt_path=ckpt_path, log_dir=tb_dir, class_weights=class_weights,
+        )
+    if name == "first_layer_laplace":
+        return FirstLayerLaplace(
+            train_cfg=train_cfg, laplace_cfg=cfg.method.laplace,
+            ckpt_path=ckpt_path, log_dir=tb_dir, class_weights=class_weights,
+            bayesian_modules=list(cfg.method.get("bayesian_layers", ["conv1"])),
+            map_checkpoint=_resolve_map_checkpoint(cfg),
         )
     if name == "deep_ensemble":
         n_members = int(cfg.method.get("n_members", 5))

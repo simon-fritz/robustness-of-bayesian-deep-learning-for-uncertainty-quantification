@@ -1,0 +1,37 @@
+# First-layer Laplace approximation (laplace-torch, subnetwork Laplace).
+# Two phases: (1) MAP training — identical to last_layer_laplace and skippable
+# via map_checkpoint / reuse_map_from since the fit is post-hoc;
+# (2) Laplace fit over the first conv layer's weights (subset_of_weights is
+# always "subnetwork"; the requires_grad trick keeps Jacobians at subnet size).
+name: first_layer_laplace
+# Modules that receive the posterior; dotted paths allowed (resolved via
+# model.get_submodule). "conv1" targets the ResNet stem conv (9,408 params).
+bayesian_layers: ["conv1"]
+
+# Phase 1: MAP training. Same fields as the deterministic method config.
+training:
+  optimizer: adam
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  epochs: 30
+  early_stopping_patience: 5
+  use_class_weights: true
+
+# Phase 2: Laplace approximation.
+laplace:
+  hessian_structure: full              # full | diag (subnetwork supports only these)
+  prior_precision_method: marglik      # marglik | <float>
+  # Predictive type. conv1's posterior is wide (~ the prior), so "nn" weight
+  # sampling scrambles the stem conv and collapses predictions (MC acc 0.62 vs
+  # GLM acc 0.92). "glm" linearizes around the MAP — use it for first-layer.
+  pred_type: glm                       # glm | nn
+  n_predictive_samples: 100            # MC samples drawn at predict time
+  # Peak fit memory scales ~ batch * (n_subnet_params)^2: the full-GGN builds a
+  # (batch, classes, p, p)-ish einsum intermediate. For conv1 (p=9408) that is
+  # ~batch*0.7 GB, so keep the batch small (4 -> ~3 GB; 32 OOM'd 64 GB). This is
+  # a memory knob, not a speed knob — total fit work is ~independent of batch.
+  fit_batch_size: 4
+  # The GLM predictive also runs a jacrev over conv1, so its memory scales with
+  # the eval batch the same way. Test/OOD loaders use large batches (128/256)
+  # that would OOM here, so evaluation caps the loader batch to this value.
+  eval_batch_size: 16

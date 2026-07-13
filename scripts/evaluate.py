@@ -58,7 +58,7 @@ def _deterministic_samples(model, loader, device) -> tuple[torch.Tensor, torch.T
 
 @torch.no_grad()
 def _laplace_samples(
-    la, loader, device, n_samples: int
+    la, loader, device, n_samples: int, pred_type: str = "nn"
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Return ``(probs[S, N, C], y[N], logit_mean[N, C], logit_var[N, C], logit_sigma[N, C])``.
 
@@ -66,11 +66,16 @@ def _laplace_samples(
     Gaussian over logits (``pred_type="glm"``) gives the sampling-free
     logit-variance scores. ``logit_sigma = sqrt(logit_var)`` is the same
     Gaussian's standard deviation, on the natural (same-units-as-logits) scale.
+
+    ``pred_type`` selects how the softmax samples are drawn: ``"nn"`` samples
+    network weights (last-layer default), ``"glm"`` samples the linearized
+    function-space posterior (first-layer default — weight sampling collapses a
+    wide conv1 posterior).
     """
     all_p, all_y, all_lm, all_lv, all_ls = [], [], [], [], []
     for x, y in loader:
         xb = x.to(device)
-        s = la.predictive_samples(xb, pred_type="nn", n_samples=n_samples).cpu()
+        s = la.predictive_samples(xb, pred_type=pred_type, n_samples=n_samples).cpu()
         f_mu, f_var = la._glm_predictive_distribution(xb, diagonal_output=True)
         all_p.append(s)
         all_y.append(y)
@@ -158,27 +163,45 @@ def main() -> None:
         ckpt_path = Path((run_dir / "checkpoint_path.txt").read_text().strip())
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    # First-layer (subnetwork) Laplace runs a jacrev over conv1 for the GLM
+    # predictive, whose peak memory scales with the eval batch size (same
+    # batch * p^2 cost as the fit). Cap the loader batch so the large default
+    # test batch doesn't OOM. Deterministic / last-layer runs are untouched.
+    if method_name == "first_layer_laplace":
+        cfg.data.batch_size = int(cfg.method.laplace.get("eval_batch_size", 16))
     data = MedMNISTLoader(cfg.data)
 
     logit_mean = logit_var = logit_sigma = None
     if method_name == "deterministic":
         model = _load_model(cfg, ckpt_path, device, data.metadata.num_classes, data.metadata.in_channels)
         probs_samples, y = _deterministic_samples(model, data.test_loader(), device)
-    elif method_name == "last_layer_laplace":
+    elif method_name in ("last_layer_laplace", "first_layer_laplace"):
         model = _load_model(cfg, ckpt_path, device, data.metadata.num_classes, data.metadata.in_channels)
-        from laplace import Laplace
         la_path = ckpt_path.with_suffix(".laplace.pt")
-        payload = torch.load(la_path, map_location=device, weights_only=False)
-        la = Laplace(
-            model, likelihood="classification",
-            subset_of_weights=payload["subset_of_weights"],
-            hessian_structure=payload["hessian_structure"],
-        )
-        la.load_state_dict(payload["state_dict"])
+        if method_name == "first_layer_laplace":
+            # Subnetwork Laplace needs the requires_grad pattern + indices
+            # re-applied before load_state_dict; the classmethod handles it.
+            from bnn_medmnist.methods.first_layer_laplace import FirstLayerLaplace
+            la = FirstLayerLaplace.load_laplace(model, la_path, device)
+        else:
+            from laplace import Laplace
+            payload = torch.load(la_path, map_location=device, weights_only=False)
+            la = Laplace(
+                model, likelihood="classification",
+                subset_of_weights=payload["subset_of_weights"],
+                hessian_structure=payload["hessian_structure"],
+            )
+            la.load_state_dict(payload["state_dict"])
         n_samples = int(args.n_samples or cfg.method.laplace.n_predictive_samples)
-        print(f"drawing {n_samples} predictive samples per test example...", flush=True)
+        # First-layer's wide conv1 posterior collapses under weight sampling, so
+        # default it to the GLM (linearized) predictive; last-layer keeps "nn".
+        # Old run configs lack pred_type, hence the method-name-based default.
+        default_pt = "glm" if method_name == "first_layer_laplace" else "nn"
+        pred_type = str(cfg.method.laplace.get("pred_type", default_pt))
+        print(f"drawing {n_samples} predictive samples per test example "
+              f"(pred_type={pred_type})...", flush=True)
         probs_samples, y, logit_mean, logit_var, logit_sigma = _laplace_samples(
-            la, data.test_loader(), device, n_samples
+            la, data.test_loader(), device, n_samples, pred_type=pred_type
         )
         
         
