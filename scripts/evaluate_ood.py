@@ -315,6 +315,9 @@ def main() -> None:
     parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--n-samples", type=int, default=None,
                         help="Override n_predictive_samples from the OOD config.")
+    parser.add_argument("--eval-batch-size", type=int, default=None,
+                        help="Override the loader batch for first-layer Laplace "
+                             "(lower if the conv1 GLM predictive OOMs).")
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir).resolve()
@@ -375,11 +378,15 @@ def main() -> None:
     pair = ood_pair_from_cfg(ood_cfg)
     batch_size = int(ood_cfg.get("batch_size", 256))
     # First-layer (subnetwork) Laplace runs a jacrev over conv1 for the GLM
-    # predictive; its peak memory scales with the eval batch (same batch * p^2
-    # cost as the fit), so cap the (larger) OOD batch to avoid an OOM. This
-    # loader batch drives both the ID and OOD passes via build_ood_loaders.
+    # predictive; that jacrev vmaps batch*classes backward passes through the
+    # whole net, so peak GPU memory scales ~ batch*activations (batch 16 alone
+    # needs ~43 GB on ResNet18@224). Cap the loader batch small; it drives both
+    # the ID and OOD passes via build_ood_loaders. CLI flag wins over config so
+    # already-fitted runs can be re-evaluated safely.
     if method_name == "first_layer_laplace":
-        batch_size = min(batch_size, int(run_cfg.method.laplace.get("eval_batch_size", 16)))
+        cap = int(args.eval_batch_size or run_cfg.method.laplace.get("eval_batch_size", 4))
+        batch_size = min(batch_size, cap)
+        print(f"[evaluate_ood] first_layer_laplace eval batch = {batch_size}", flush=True)
     num_workers = int(ood_cfg.get("num_workers", 4))
     data_root = str(run_cfg.data.get("root", "./data"))
     id_loader_t, ood_loaders = build_ood_loaders(

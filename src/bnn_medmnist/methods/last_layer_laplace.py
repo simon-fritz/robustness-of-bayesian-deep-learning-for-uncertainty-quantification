@@ -137,7 +137,11 @@ class LastLayerLaplace(BayesianMethod):
             raise RuntimeError("LastLayerLaplace.fit must be called before predict.")
         n = int(n_samples) if n_samples is not None else self.n_samples
         x = x.to(self.device)
-        return self.la.predictive_samples(x, pred_type=self.pred_type, n_samples=n)
+        # detach: the GLM predictive builds an autograd graph (enable_grad); not
+        # detaching leaks GPU memory across eval batches on large OOD sets.
+        return self.la.predictive_samples(
+            x, pred_type=self.pred_type, n_samples=n
+        ).detach()
 
     @torch.no_grad()
     def glm_logit_distribution(
@@ -154,7 +158,10 @@ class LastLayerLaplace(BayesianMethod):
             raise RuntimeError("LastLayerLaplace.fit must be called before predict.")
         x = x.to(self.device)
         f_mu, f_var = self.la._glm_predictive_distribution(x, diagonal_output=True)
-        return f_mu, f_var
+        # detach: _glm_predictive_distribution runs under enable_grad, so its
+        # outputs carry the autograd graph; keeping it leaks GPU memory across
+        # eval batches (OOM on large OOD sets).
+        return f_mu.detach(), f_var.detach()
 
     @torch.no_grad()
     def glm_logit_sigma(self, x: torch.Tensor) -> torch.Tensor:

@@ -75,8 +75,13 @@ def _laplace_samples(
     all_p, all_y, all_lm, all_lv, all_ls = [], [], [], [], []
     for x, y in loader:
         xb = x.to(device)
-        s = la.predictive_samples(xb, pred_type=pred_type, n_samples=n_samples).cpu()
+        # The GLM predictive computes Jacobians under enable_grad, so its outputs
+        # stay attached to the autograd graph; detach before stashing or every
+        # batch's graph is kept alive and GPU memory grows until it OOMs on large
+        # (OOD) sets.
+        s = la.predictive_samples(xb, pred_type=pred_type, n_samples=n_samples).detach().cpu()
         f_mu, f_var = la._glm_predictive_distribution(xb, diagonal_output=True)
+        f_mu, f_var = f_mu.detach(), f_var.detach()
         all_p.append(s)
         all_y.append(y)
         all_lm.append(f_mu.cpu())
@@ -150,6 +155,10 @@ def main() -> None:
     parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--n-samples", type=int, default=None,
                         help="Override predictive sample count for Bayesian methods.")
+    parser.add_argument("--eval-batch-size", type=int, default=None,
+                        help="Override the loader batch for first-layer Laplace "
+                             "(the conv1 jacrev peaks at ~batch*activations; "
+                             "lower this if the GLM predictive OOMs).")
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir).resolve()
@@ -164,11 +173,16 @@ def main() -> None:
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # First-layer (subnetwork) Laplace runs a jacrev over conv1 for the GLM
-    # predictive, whose peak memory scales with the eval batch size (same
-    # batch * p^2 cost as the fit). Cap the loader batch so the large default
-    # test batch doesn't OOM. Deterministic / last-layer runs are untouched.
+    # predictive; that jacrev vmaps batch*classes backward passes through the
+    # whole net, so peak GPU memory scales ~ batch*activations (batch 16 alone
+    # needs ~43 GB on ResNet18@224). Cap the loader batch small. CLI flag wins
+    # over the config so already-fitted runs can be re-evaluated safely.
     if method_name == "first_layer_laplace":
-        cfg.data.batch_size = int(cfg.method.laplace.get("eval_batch_size", 16))
+        cfg.data.batch_size = int(
+            args.eval_batch_size or cfg.method.laplace.get("eval_batch_size", 4)
+        )
+        print(f"[evaluate] first_layer_laplace eval batch = {cfg.data.batch_size}",
+              flush=True)
     data = MedMNISTLoader(cfg.data)
 
     logit_mean = logit_var = logit_sigma = None

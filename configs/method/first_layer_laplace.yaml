@@ -31,7 +31,8 @@ laplace:
   # ~batch*0.7 GB, so keep the batch small (4 -> ~3 GB; 32 OOM'd 64 GB). This is
   # a memory knob, not a speed knob — total fit work is ~independent of batch.
   fit_batch_size: 4
-  # The GLM predictive also runs a jacrev over conv1, so its memory scales with
-  # the eval batch the same way. Test/OOD loaders use large batches (128/256)
-  # that would OOM here, so evaluation caps the loader batch to this value.
-  eval_batch_size: 16
+  # The GLM predictive also runs a jacrev over conv1, which vmaps batch*classes
+  # backward passes through the whole net -> peak memory ~ batch*activations
+  # (batch 16 alone needs ~43 GB on ResNet18@224). Evaluation caps the loader
+  # batch to this; keep it small. Override per-run with --eval-batch-size.
+  eval_batch_size: 4
