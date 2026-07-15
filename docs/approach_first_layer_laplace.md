@@ -103,9 +103,3 @@ weakest (0.57). On **long-tail data-scarcity**, the *epistemic* signals win —
 logit variance 0.93, mutual information 0.91 — exactly what a Bayesian treatment
 of the feature extractor should flag. So first-layer epistemic uncertainty
 tracks *how much data* was seen more than *how semantically far* an input is.
-
-## Open / planned extensions
-
-- More seeds; head-to-head vs. baseline / LLL / ensembles on the same table.
-- Other Bayesian extents (first block `layer1`, first+last combined).
-- `hessian_structure: diag` fallback if the full fit gets slow at scale.

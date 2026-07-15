@@ -3,7 +3,7 @@
 Covers three experiment groups:
   1. full_data   — balanced PneumoniaMNIST, ResNet-18 (LLL / MAP / Ensemble)
   2. longtail    — class_subsampling 2% normal, ResNet-18 (LLL / MAP / Ensemble)
-  3. data_eff    — SmallCNN, train_size 100/1000/10000 (LLL / MAP / Ensemble)
+  3. data_eff    — ResNet-18, train_size 100/1000/10000 (LLL / MAP / Ensemble)
 
 Usage:
     python scripts/aggregate_all.py

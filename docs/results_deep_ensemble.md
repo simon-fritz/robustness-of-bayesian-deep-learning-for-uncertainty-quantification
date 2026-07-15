@@ -145,27 +145,5 @@ the same AUROC. Bayesian machinery has no headroom to help.
    class* with MI AUROC ≈ 0.85. The tail class is in-distribution by
    construction; only its training density differs. The fact that an epistemic
    "OOD detector" fires on it confirms the score is reading data density, not
-   distribution membership. See [results_long_tail.md] (TBD) once the long-tail
-   DE run lands.
+   distribution membership. See `results_long_tail.md`.
 
----
-
-## 6. Open Items
-
-- **Add CI bars.** A single N=5 run is not a measurement. Re-run with multiple
-  `seed` values (e.g. 42, 1337, 2024) once the team's split-handling work
-  lands, and report Far-OOD AUROC with confidence intervals. The 0.09 swing
-  documented in §4 needs to be located inside (or outside) the seed-to-seed
-  noise envelope.
-- **Re-initialize the classifier head per member**, not just data ordering. With
-  identical init weights, the only diversity source is shuffle order — too thin
-  for a 5-member ResNet-18 ensemble. Simplest patch: pass a `model_factory`
-  callable into `DeepEnsemble.fit` and rebuild fresh under each seed.
-- **Train the long-tail DE counterpart.** Config needed:
-  `configs/experiment/training/pneumonia_longtail_deep_ensemble.yaml`. With it,
-  the three-method ladder (DET / LLL / DE) is complete on the misspecification
-  demonstration and §5 point 4 stops being a TODO.
-- **Sweep the tail fraction** (`class_subsampling: {0: x}` for x ∈ {0.5, 0.2,
-  0.05, 0.02, 0.005}) for the strongest single figure: epistemic AUROC should
-  rise as x → 0 because density gap widens — directly demonstrating
-  Li et al. §5.3 on your own pipeline.

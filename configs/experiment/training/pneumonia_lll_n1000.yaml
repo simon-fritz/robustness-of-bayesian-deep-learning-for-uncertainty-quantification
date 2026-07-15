@@ -1,10 +1,15 @@
-# Data-efficiency variant of pneumonia_lll: training capped to 1000 examples
-# (random subsample under the global seed; val/test untouched). Pairs with
-# pneumonia_lll_n100 / pneumonia_lll_n10000 to study how last-layer Laplace's
-# calibration and epistemic-uncertainty signal degrade as training data shrinks.
+# Data-efficiency variant of pneumonia_resnet18_lll: training capped to 1000
+# examples (random subsample under the global seed; val/test untouched). Pairs
+# with pneumonia_lll_n100 / pneumonia_lll_n10000 to study how last-layer
+# Laplace's calibration and epistemic-uncertainty signal degrade as training
+# data shrinks.
+#
+# Architecture: ImageNet-pretrained ResNet-18 — identical to the full-data /
+# long-tail LLL runs, so the sweep is comparable both across methods and back to
+# the main experiments. (See docs/architecture_choice.md.)
 defaults:
   - /data: pneumoniamnist
-  - /model: small_cnn
+  - /model: resnet18
   - /method: last_layer_laplace
   - _self_
 
@@ -12,8 +17,23 @@ experiment_name: pneumonia_lll_n1000
 run_name: pneumonia_lll_n1000
 seed: 42
 
+# ImageNet-style preprocessing required by the pretrained ResNet-18:
+# 28x28 grayscale -> 224x224, expanded to 3 channels, ImageNet-normalized.
 data:
   train_size: 1000
+  image_transform:
+    resize: 224
+    expand_channels_to: 3
+    normalize:
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+
+# Fine-tuning choices for the MAP phase: lower LR + fewer epochs than from-scratch.
+method:
+  training:
+    lr: 1.0e-4
+    epochs: 15
+    use_amp: false
 
 output_dir: outputs
 checkpoint_dir: checkpoints

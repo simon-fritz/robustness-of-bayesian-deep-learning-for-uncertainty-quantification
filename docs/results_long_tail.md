@@ -205,28 +205,3 @@ is the side-by-side AUROC summary for `tail_0` (≈0.85) vs. `bloodmnist`
 (≈0.40) from the *same DE checkpoint*. Same model, same score, same
 evaluator — totally different reliability depending on which "OOD-ness" we
 ask about.
-
----
-
-## 6. Open Items
-
-- **Multiclass long-tail (BloodMNIST).** Train DET / LLL / DE with one class
-  sub-sampled to 2%. Removes the binary-task confound. Configs:
-  `configs/experiment/training/bloodmnist_longtail_{det,lll,de}.yaml`
-  (to be written; ood config already exists).
-- **Tail-fraction sweep.** Re-train with subsampling x ∈ {0.5, 0.2, 0.05, 0.02, 0.005}.
-  Predicted by §5.3: epistemic AUROC on the tail class rises as x → 0,
-  because the density gap widens. A single figure (x-axis: tail fraction,
-  y-axis: MI AUROC) would be a presentation centrepiece.
-- **Without class weighting.** Re-run the trio with `use_class_weights:
-  false` to push the imbalance harder. Expected: Far-OOD inversion deepens,
-  tail-class AUROC stays high.
-- **Multi-seed CIs.** Once the split work lands, repeat each cell across ≥3
-  seeds. Turns the Far-OOD inversion from "striking single number" into
-  "measurement with error bars."
-- **Per-member re-initialization for DE.** Open item from
-  [results_deep_ensemble.md](results_deep_ensemble.md) — currently all DE
-  members share initial weights (`copy.deepcopy(model)`); only data ordering
-  varies. With true per-member weight init, the DE Far-OOD inversion might
-  *narrow* (more diversity → broader posterior → less confident
-  misclassification on Far-OOD). Worth measuring.
