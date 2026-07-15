@@ -84,22 +84,42 @@ GLM predictive, `eval_batch_size=4`. Full metrics in each run's
 
 | run       | accuracy | balanced acc | AUROC | ECE   |
 |-----------|---------:|-------------:|------:|------:|
-| standard  |    0.907 |        0.878 | 0.984 | 0.089 |
+| standard  |    0.923 |        0.898 | 0.985 | 0.103 |
 | long-tail |    0.700 |        0.601 | 0.890 | 0.132 |
 
 The long-tail run subsamples the "normal" class to 2% (24 train images), so the
 tail class — not the method — drives the drop in balanced accuracy / calibration.
 
-**OOD detection (AUROC), best score per family:**
+**OOD detection (AUROC), one score per family** (`logit variance` = `logit_variance_sum`):
 
-| scenario                     | predictive entropy | expected entropy (aleatoric) | mutual info (epistemic) | logit variance (Laplace) |
-|------------------------------|-------------------:|-----------------------------:|------------------------:|-------------------------:|
-| near-OOD (organamnist)       |              0.831 |                    **0.898** |                   0.734 |                    0.571 |
-| long-tail (under-rep. class) |              0.882 |                        0.672 |                   0.910 |                **0.929** |
+| training run | shift | pred. entropy | exp. entropy (aleatoric) | mutual info (epistemic) | logit variance (Laplace) |
+|---|---|--:|--:|--:|--:|
+| standard  | far-OOD (bloodmnist, semantic)   | 0.451 | 0.446 | 0.464 | 0.552 |
+| standard  | near-OOD (organamnist, semantic) | 0.831 | **0.898** | 0.734 | 0.571 |
+| long-tail | far-OOD (bloodmnist, semantic)   | 0.717 | 0.345 | 0.779 | 0.849 |
+| long-tail | near-OOD (organamnist, semantic) | 0.429 | 0.320 | 0.514 | 0.679 |
+| long-tail | tail class (density)             | 0.882 | 0.672 | **0.910** | **0.929** |
 
-**Takeaway.** The ranking flips between the two shifts. On semantic **near-OOD**,
-aleatoric/predictive-entropy leads and conv1's analytical logit variance is
-weakest (0.57). On **long-tail data-scarcity**, the *epistemic* signals win —
-logit variance 0.93, mutual information 0.91 — exactly what a Bayesian treatment
-of the feature extractor should flag. So first-layer epistemic uncertainty
-tracks *how much data* was seen more than *how semantically far* an input is.
+On the *standard* model every far-OOD score sits at/below chance (`logit_variance_max`
+reaches only 0.65) — the stem's posterior gives essentially no semantic-OOD signal.
+The near-OOD row is from the standard model; the long-tail rows are from the
+long-tail model.
+
+**Takeaway.** The epistemic signal fires on the **density** shift, not the
+**semantic** ones. On long-tail data-scarcity the epistemic scores win (logit
+variance 0.93, mutual information 0.91) — what a Bayesian feature extractor
+*should* flag — while on semantic shift they are weakest: near-OOD logit variance
+0.57 (aleatoric entropy leads at 0.90) and far-OOD collapses to chance for every
+score (~0.45). So first-layer epistemic uncertainty tracks *how much data* was
+seen, not *how semantically far* an input is — the same Li et al. (2025) pattern
+the [long-tail experiment](results_long_tail.md) shows.
+
+**FLL vs. LLL — where the Bayesian treatment matters.** The signal that made
+last-layer Laplace a good *semantic* far-OOD detector does **not** transfer to the
+first layer: full-data far-OOD `logit_variance` is ≈0.94 (5 seeds) for LLL but only
+0.55 for FLL. The useful semantic-OOD signal is a property of the *last-layer*
+posterior, not the stem. Two caveats before over-reading this: FLL is
+**single-seed (42)** so far, and its calibration is *worse* than LLL's (standard
+ECE 0.10 vs. ~0.02) — the wide conv1 posterior inflates the predictive spread. A
+same-table head-to-head across 5 seeds (and a first+last-combined variant) is the
+natural next step.

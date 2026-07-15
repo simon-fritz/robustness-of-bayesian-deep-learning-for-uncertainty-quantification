@@ -10,6 +10,12 @@ answer the wrong question for OOD detection.* We document below not just the OOD
 numbers but also a stability comparison against a prior run that differs only in
 data-loader rebuild order. The pattern is more informative than either run alone.
 
+> **Note (seeds).** The numbers here are from a **single seed (42)**, kept for the
+> detailed stability analysis in §4. For 5-seed means ± std across all
+> methods/scenarios see [../results/all_experiments_summary.csv](../results/all_experiments_summary.csv)
+> (e.g. full-data Deep Ensemble far-OOD MI is 0.82 ± 0.07 over seeds, vs. the 0.875
+> single-run value below).
+
 ---
 
 ## 1. In-Distribution Performance & Calibration
@@ -145,5 +151,5 @@ the same AUROC. Bayesian machinery has no headroom to help.
    class* with MI AUROC ≈ 0.85. The tail class is in-distribution by
    construction; only its training density differs. The fact that an epistemic
    "OOD detector" fires on it confirms the score is reading data density, not
-   distribution membership. See `results_long_tail.md`.
+   distribution membership. See [results_long_tail.md](results_long_tail.md).
 

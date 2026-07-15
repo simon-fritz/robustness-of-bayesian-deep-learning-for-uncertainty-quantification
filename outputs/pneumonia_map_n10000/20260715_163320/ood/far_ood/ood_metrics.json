@@ -1,0 +1,44 @@
+{
+  "bloodmnist": {
+    "predictive_entropy": {
+      "auroc": 0.4946709239313741,
+      "auprc": 0.7824831730934565,
+      "fpr_at_95_tpr": 0.6682692307692307
+    },
+    "one_minus_max_softmax": {
+      "auroc": 0.49466741056371283,
+      "auprc": 0.7825062310884447,
+      "fpr_at_95_tpr": 0.6682692307692307
+    },
+    "mutual_information": {
+      "auroc": 0.5,
+      "auprc": 0.8457354758961682,
+      "fpr_at_95_tpr": 1.0
+    },
+    "expected_entropy": {
+      "auroc": 0.4946709239313741,
+      "auprc": 0.7824831730934565,
+      "fpr_at_95_tpr": 0.6682692307692307
+    },
+    "softmax_variance_sum": {
+      "auroc": 0.5,
+      "auprc": 0.8457354758961682,
+      "fpr_at_95_tpr": 1.0
+    },
+    "softmax_variance_max": {
+      "auroc": 0.5,
+      "auprc": 0.8457354758961682,
+      "fpr_at_95_tpr": 1.0
+    },
+    "softmax_quantile_range_sum": {
+      "auroc": 0.5,
+      "auprc": 0.8457354758961682,
+      "fpr_at_95_tpr": 1.0
+    },
+    "softmax_quantile_range_max": {
+      "auroc": 0.5,
+      "auprc": 0.8457354758961682,
+      "fpr_at_95_tpr": 1.0
+    }
+  }
+}

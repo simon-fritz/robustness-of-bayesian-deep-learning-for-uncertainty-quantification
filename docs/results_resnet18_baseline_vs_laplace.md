@@ -5,6 +5,12 @@ with last-layer Laplace (`lll`). In-distribution = PneumoniaMNIST, far-OOD =
 BloodMNIST (colour blood-cell microscopy), near-OOD = OrganAMNIST (grayscale
 abdominal CT slices — same modality family as a chest X-ray).
 
+> **Note (seeds).** This is a **single-seed** comparison (run `20260603_125825`),
+> kept for its per-score detail. For 5-seed means ± std across all
+> methods/scenarios see [../results/all_experiments_summary.csv](../results/all_experiments_summary.csv);
+> the single-seed figures below are representative but not the averaged values
+> (e.g. LLL far-OOD `logit_variance` reads 0.956 here vs. 0.94 ± 0.05 over 5 seeds).
+
 ## Classification
 
 | Metric | baseline | lll (Laplace) |

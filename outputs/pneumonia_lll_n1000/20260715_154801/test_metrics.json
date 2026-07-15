@@ -1,0 +1,12 @@
+{
+  "accuracy": 0.8766025641025641,
+  "balanced_accuracy": 0.8431623931623932,
+  "auroc": 0.9709072978303748,
+  "ece": 0.05710327854523292,
+  "nll": 0.28503286838531494,
+  "brier": 0.17118509113788605,
+  "mean_predictive_entropy": 0.3790475130081177,
+  "mean_expected_entropy": 0.143204927444458,
+  "mean_mutual_information": 0.23584258556365967,
+  "max_mutual_information": 0.5095925331115723
+}

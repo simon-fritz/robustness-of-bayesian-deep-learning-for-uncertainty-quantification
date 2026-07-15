@@ -2,8 +2,8 @@
 
 OOD detection with Bayesian Neural Networks on MedMNIST (PneumoniaMNIST).
 
-Based on Li et al. (2025). Experiments: Last-Layer Laplace (LLL), MAP (deterministic),
-and Deep Ensemble on PneumoniaMNIST, evaluated on in-distribution accuracy and
+Based on Li et al. (2025). Experiments: Last-Layer Laplace (LLL), First-Layer
+Laplace (FLL), MAP (deterministic), and Deep Ensemble on PneumoniaMNIST, evaluated on in-distribution accuracy and
 OOD detection (far-OOD: BloodMNIST, near-OOD: OrganAMNIST) across three scenarios:
 full balanced data, long-tail class imbalance, and varying training set size.
 
@@ -15,7 +15,15 @@ full balanced data, long-tail class imbalance, and varying training set size.
 pip install -e .
 ```
 
-Python 3.10+ required.
+Python 3.10+ required. For the test suite, install the dev extras and run pytest:
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
+
+`tests/test_first_layer_laplace.py` runs offline (synthetic tensors);
+`tests/test_medmnist_loader_filters.py` downloads BloodMNIST on first run.
 
 ---
 
@@ -36,6 +44,7 @@ export DATA_ROOT=/some/shared/path
 | Method | Architecture | Key idea |
 |---|---|---|
 | **LLL** (Last-Layer Laplace) | ResNet-18 | MAP train, Gaussian posterior over last-layer weights via `laplace-torch` |
+| **FLL** (First-Layer Laplace) | ResNet-18 | MAP train, Gaussian posterior over the stem conv (`conv1`) via `laplace-torch`, GLM predictive — mirror of LLL to probe *where* the Bayesian treatment matters (single-seed, exploratory) |
 | **MAP** (deterministic) | ResNet-18 | Standard cross-entropy, no uncertainty |
 | **Deep Ensemble** | ResNet-18 × 5 | 5 independently trained models, uncertainty from disagreement |
 
@@ -51,7 +60,30 @@ export DATA_ROOT=/some/shared/path
 
 ---
 
+## Results
+
+Headline across the experiments: epistemic uncertainty tracks *training-data
+density*, not *distribution membership* — the central claim of Li et al. (2025).
+5-seed aggregates live in
+[results/all_experiments_summary.csv](results/all_experiments_summary.csv);
+per-topic write-ups:
+
+- [docs/results_resnet18_baseline_vs_laplace.md](docs/results_resnet18_baseline_vs_laplace.md) — full-data MAP vs. LLL: Laplace calibrates ~3× better at no accuracy cost; the best OOD score flips between far- and near-OOD.
+- [docs/results_long_tail.md](docs/results_long_tail.md) — the headline experiment: an epistemic "OOD detector" fires on the *in-distribution* rare class (MI ≈ 0.85) yet inverts on true far-OOD.
+- [docs/results_deep_ensemble.md](docs/results_deep_ensemble.md) — Deep Ensemble ID/OOD + a stability anomaly (better classifier → worse far-OOD detector).
+- [docs/results_data_efficiency.md](docs/results_data_efficiency.md) — how calibration and the OOD signal change with 100 / 1 000 / 10 000 training images (all ResNet-18).
+- [docs/approach_first_layer_laplace.md](docs/approach_first_layer_laplace.md) — First-Layer Laplace (`conv1`) vs. last layer: where in the network the Bayesian treatment matters *(single-seed, exploratory)*.
+
+Background: [docs/architecture_choice.md](docs/architecture_choice.md), [docs/evaluation_overview.md](docs/evaluation_overview.md).
+
+---
+
 ## Running experiments
+
+> The `slurm/*.sbatch` headers (`--partition=universe,asteroids`, `--qos`,
+> `ml python/anaconda3`) target the TUM CIT cluster — adjust them for your
+> scheduler. No cluster? Run any config without SLURM via
+> [Running locally](#running-locally-no-slurm).
 
 ### Full-data + long-tail (5 seeds each → 30 jobs)
 
@@ -111,6 +143,7 @@ sbatch slurm/train_longtail_generic.sbatch    configs/experiment/pneumonia_resne
 | Config | Method |
 |---|---|
 | `configs/experiment/pneumonia_resnet18_lll.yaml` | LLL |
+| `configs/experiment/pneumonia_resnet18_fll.yaml` | FLL |
 | `configs/experiment/pneumonia_resnet18_baseline.yaml` | MAP |
 | `configs/experiment/training/pneumonia_resnet18_deep_ensemble.yaml` | Ensemble |
 
@@ -119,6 +152,7 @@ sbatch slurm/train_longtail_generic.sbatch    configs/experiment/pneumonia_resne
 | Config | Method |
 |---|---|
 | `configs/experiment/pneumonia_resnet18_longtail_lll.yaml` | LLL |
+| `configs/experiment/pneumonia_resnet18_longtail_fll.yaml` | FLL |
 | `configs/experiment/pneumonia_resnet18_longtail_baseline.yaml` | MAP |
 | `configs/experiment/pneumonia_resnet18_longtail_deep_ensemble.yaml` | Ensemble |
 
@@ -152,9 +186,9 @@ hardware gives identical results.
 ```
 outputs/<run_name>/<timestamp>/
   config.yaml           — full config used (including actual seed)
-  metrics.json          — in-distribution accuracy, AUROC, ECE
+  test_metrics.json     — in-distribution accuracy, balanced accuracy, AUROC, ECE, NLL, Brier
   checkpoint_path.txt   — path to best checkpoint
-  sigma_summary.json    — LLL only: mean/max diag(Σ), ‖Σ‖_F
+  sigma_summary.json    — LLL / FLL only: mean/max diag(Σ), ‖Σ‖_F
   ood/
     far_ood/ood_metrics.json    — AUROC per score (BloodMNIST)
     near_ood/ood_metrics.json   — AUROC per score (OrganAMNIST)
