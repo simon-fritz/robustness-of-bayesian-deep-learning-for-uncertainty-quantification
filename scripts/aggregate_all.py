@@ -170,7 +170,7 @@ def build_summary_table(raw: pd.DataFrame) -> pd.DataFrame:
         for col in numeric_cols:
             vals = grp[col].dropna()
             row[f"{col}_mean"] = float(vals.mean()) if len(vals) else float("nan")
-            row[f"{col}_std"]  = float(vals.std(ddof=0)) if len(vals) > 1 else (float(vals.iloc[0]) if len(vals) == 1 else float("nan"))
+            row[f"{col}_std"]  = float(vals.std(ddof=0)) if len(vals) > 1 else (0.0 if len(vals) == 1 else float("nan"))
         agg.append(row)
     return pd.DataFrame(agg).sort_values(group_cols, na_position="last").reset_index(drop=True)
 
