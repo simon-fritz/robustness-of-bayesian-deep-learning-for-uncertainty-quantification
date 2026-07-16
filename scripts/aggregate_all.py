@@ -1,14 +1,17 @@
 """Aggregate ALL experiment results into unified CSVs and a summary table.
 
 Covers three experiment groups:
-  1. full_data   — balanced PneumoniaMNIST, ResNet-18 (LLL / MAP / Ensemble)
-  2. longtail    — class_subsampling 2% normal, ResNet-18 (LLL / MAP / Ensemble)
+  1. full_data   — balanced PneumoniaMNIST, ResNet-18 (LLL / FLL / MAP / Ensemble)
+  2. longtail    — class_subsampling 2% normal, ResNet-18 (LLL / FLL / MAP / Ensemble)
   3. data_eff    — ResNet-18, train_size 100/1000/10000 (LLL / MAP / Ensemble)
 
+Note: FLL (First-Layer Laplace) is single-seed (seed=42), exploratory.
+      Run with --seeds 42 to include only its seed.
+
 Usage:
-    python scripts/aggregate_all.py
-    python scripts/aggregate_all.py --seeds 0 1 2 3 4   # sweep seeds only
-    python scripts/aggregate_all.py --seeds 0 1 2 3 4 42  # include legacy seed
+    python scripts/aggregate_all.py --seeds 0 1 2 3 4        # 5-seed methods only
+    python scripts/aggregate_all.py --seeds 0 1 2 3 4 42     # include FLL (seed=42) and legacy runs
+    python scripts/aggregate_all.py --seeds 42               # FLL only
 
 Output:
     results/all_experiments_raw.csv      — one row per run
@@ -32,6 +35,7 @@ NEAR_OOD_DATASET = "organamnist"
 # Primary OOD score per method (used in the summary display table)
 PRIMARY_SCORE = {
     "lll":      "mutual_information",
+    "fll":      "mutual_information",
     "map":      "predictive_entropy",
     "ensemble": "mutual_information",
 }
@@ -41,10 +45,12 @@ PRIMARY_SCORE = {
 EXPERIMENTS = [
     # --- full-data balanced ---
     ("full_data", "lll",      "pneumonia_resnet18_lll",               None,  ["far_ood", "near_ood"]),
+    ("full_data", "fll",      "pneumonia_resnet18_fll",               None,  ["far_ood", "near_ood"]),
     ("full_data", "map",      "pneumonia_resnet18_baseline",           None,  ["far_ood", "near_ood"]),
     ("full_data", "ensemble", "pneumonia_deep_ensemble",               None,  ["far_ood", "near_ood"]),
     # --- long-tail ---
     ("longtail",  "lll",      "pneumonia_resnet18_longtail_normal2pct_lll", None, ["long_tail", "far_ood", "near_ood"]),
+    ("longtail",  "fll",      "pneumonia_resnet18_longtail_normal2pct_fll", None, ["long_tail", "far_ood", "near_ood"]),
     ("longtail",  "map",      "pneumonia_resnet18_longtail_normal2pct_det", None, ["long_tail", "far_ood", "near_ood"]),
     ("longtail",  "ensemble", "pneumonia_resnet18_longtail_normal2pct_de",  None, ["long_tail", "far_ood", "near_ood"]),
     # --- data-efficiency sweep ---
@@ -69,6 +75,7 @@ SCENARIO_DATASET = {
 # All uncertainty scores each method can produce
 SCORES = {
     "lll":      ["mutual_information", "logit_variance_sum", "expected_pairwise_kl", "softmax_variance_sum"],
+    "fll":      ["mutual_information", "logit_variance_sum", "expected_pairwise_kl", "softmax_variance_sum"],
     "map":      ["predictive_entropy", "one_minus_max_softmax"],
     "ensemble": ["mutual_information", "softmax_variance_sum"],
 }

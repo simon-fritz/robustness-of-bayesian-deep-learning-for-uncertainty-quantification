@@ -94,7 +94,10 @@ bash slurm/submit_all_experiments.sh
 Submits 30 jobs: 3 methods × 2 scenarios (full_data + longtail) × 5 seeds.
 After all complete:
 ```bash
+# LLL / MAP / Ensemble (seeds 0–4)
 python scripts/aggregate_all.py --seeds 0 1 2 3 4
+# Include FLL (single seed=42, exploratory):
+python scripts/aggregate_all.py --seeds 0 1 2 3 4 42
 ```
 
 Produces `results/all_experiments_summary.csv` and `results/all_experiments_raw.csv`.
@@ -121,9 +124,24 @@ bash slurm/submit_all_experiments.sh
 bash slurm/submit_data_efficiency_sweep.sh
 # monitor
 squeue -u $USER
-# after all 75 jobs complete
+# after all 75 jobs complete (LLL / MAP / Ensemble, seeds 0–4)
 python scripts/aggregate_all.py --seeds 0 1 2 3 4
 python scripts/aggregate_data_efficiency.py --seeds 0 1 2 3 4
+# optional: add FLL (single seed=42)
+python scripts/aggregate_all.py --seeds 0 1 2 3 4 42
+```
+
+### First-Layer Laplace (FLL) — single-seed exploratory
+
+FLL is not included in the 30-job sweep (it is single-seed, exploratory):
+
+```bash
+# full-data FLL (seed=42)
+sbatch slurm/resnet18_fll.sbatch
+# long-tail FLL (seed=42)
+sbatch slurm/train_longtail_generic.sbatch configs/experiment/pneumonia_resnet18_longtail_fll.yaml
+# aggregate with FLL included
+python scripts/aggregate_all.py --seeds 0 1 2 3 4 42
 ```
 
 ### Submit a single job manually
