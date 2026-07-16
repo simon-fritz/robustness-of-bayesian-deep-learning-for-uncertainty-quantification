@@ -32,6 +32,7 @@ NEAR_OOD_DATASET = "organamnist"
 # Primary OOD score per method (used in the summary display table)
 PRIMARY_SCORE = {
     "lll":      "mutual_information",
+    "fll":      "mutual_information",
     "map":      "predictive_entropy",
     "ensemble": "mutual_information",
 }
@@ -41,10 +42,12 @@ PRIMARY_SCORE = {
 EXPERIMENTS = [
     # --- full-data balanced ---
     ("full_data", "lll",      "pneumonia_resnet18_lll",               None,  ["far_ood", "near_ood"]),
+    ("full_data", "fll",      "pneumonia_resnet18_fll",               None,  ["far_ood", "near_ood"]),
     ("full_data", "map",      "pneumonia_resnet18_baseline",           None,  ["far_ood", "near_ood"]),
     ("full_data", "ensemble", "pneumonia_deep_ensemble",               None,  ["far_ood", "near_ood"]),
     # --- long-tail ---
     ("longtail",  "lll",      "pneumonia_resnet18_longtail_normal2pct_lll", None, ["long_tail", "far_ood", "near_ood"]),
+    ("longtail",  "fll",      "pneumonia_resnet18_longtail_normal2pct_fll", None, ["long_tail", "far_ood", "near_ood"]),
     ("longtail",  "map",      "pneumonia_resnet18_longtail_normal2pct_det", None, ["long_tail", "far_ood", "near_ood"]),
     ("longtail",  "ensemble", "pneumonia_resnet18_longtail_normal2pct_de",  None, ["long_tail", "far_ood", "near_ood"]),
     # --- data-efficiency sweep ---
@@ -69,6 +72,7 @@ SCENARIO_DATASET = {
 # All uncertainty scores each method can produce
 SCORES = {
     "lll":      ["mutual_information", "logit_variance_sum", "expected_pairwise_kl", "softmax_variance_sum"],
+    "fll":      ["mutual_information", "logit_variance_sum", "expected_pairwise_kl", "softmax_variance_sum"],
     "map":      ["predictive_entropy", "one_minus_max_softmax"],
     "ensemble": ["mutual_information", "softmax_variance_sum"],
 }
