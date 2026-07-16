@@ -169,10 +169,10 @@ is also the only score that doesn't fail catastrophically here.
   We will run BloodMNIST long-tail (multiclass) to disentangle. The
   config for it ([configs/experiment/ood/bloodmnist_longtail.yaml](../configs/experiment/ood/bloodmnist_longtail.yaml))
   already exists; a training config is the open item.
-- **N=1 per method.** All numbers here are from a single seed per method. The
-  Far-OOD AUROC = 0.148 on LLL is striking, but a single training run is not
-  proof that the *expected* AUROC across seeds is below 0.5. The team's
-  splits / seeded reruns will produce CIs that confirm or shrink this gap.
+- **Single-seed numbers only in this write-up.** All tables above are seed=42.
+  5-seed reruns are complete — see
+  [../results/all_experiments_summary.csv](../results/all_experiments_summary.csv)
+  for mean ± std across seeds 0–4 for all three methods in the long-tail scenario.
 - **Class weighting is on.** All three methods use class-weighted cross
   entropy (`use_class_weights: true`). That partially compensates for the
   long-tail imbalance you are trying to expose. We expect the inversion on

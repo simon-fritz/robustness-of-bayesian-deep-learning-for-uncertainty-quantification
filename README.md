@@ -126,6 +126,19 @@ python scripts/aggregate_all.py --seeds 0 1 2 3 4
 python scripts/aggregate_data_efficiency.py --seeds 0 1 2 3 4
 ```
 
+### First-Layer Laplace (FLL) — single-seed exploratory
+
+FLL is not in the 30-job sweep (single-seed, exploratory). Run separately:
+
+```bash
+# full-data FLL (seed=42)
+sbatch slurm/resnet18_fll.sbatch
+# long-tail FLL (seed=42)
+sbatch slurm/train_longtail_generic.sbatch configs/experiment/pneumonia_resnet18_longtail_fll.yaml
+```
+
+Results documented in [docs/approach_first_layer_laplace.md](docs/approach_first_layer_laplace.md).
+
 ### Submit a single job manually
 
 ```bash
