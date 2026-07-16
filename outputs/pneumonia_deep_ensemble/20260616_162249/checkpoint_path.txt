@@ -1,1 +1,0 @@
-/vol/miltank/users/gech/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/checkpoints/pneumonia_deep_ensemble/20260616_162249/best.pt

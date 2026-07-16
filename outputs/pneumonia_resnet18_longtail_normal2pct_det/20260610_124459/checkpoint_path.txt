@@ -1,1 +1,0 @@
-/vol/miltank/users/frsi/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/checkpoints/pneumonia_resnet18_longtail_normal2pct_det/20260610_124459/best.pt

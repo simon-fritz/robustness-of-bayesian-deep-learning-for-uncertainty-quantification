@@ -1,1 +1,0 @@
-/Users/cgerards/Documents/projects/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/checkpoints/pneumonia_deep_ensemble/20260607_122419/best.pt

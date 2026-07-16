@@ -1,1 +1,0 @@
-/vol/miltank/users/ahra/robustness-of-bayesian-deep-learning-for-uncertainty-quantification/checkpoints/pneumonia_deep_ensemble/20260629_132941/best.pt
