@@ -182,6 +182,19 @@ sets are always the full MedMNIST splits.
 
 ---
 
+## Paper reproduction (Li et al. 2025)
+
+The `feat/reproduction` branch contains a full reproduction of the original paper's
+experiments (CIFAR-10, `reproduction/` folder). It is kept separate from main to
+avoid mixing the paper's workflow with this project's MedMNIST experiments.
+
+```bash
+git checkout feat/reproduction
+# see reproduction/README or the branch README for run instructions
+```
+
+---
+
 ## Reproducing results exactly
 
 All randomness is controlled by the `seed` field in each config.
