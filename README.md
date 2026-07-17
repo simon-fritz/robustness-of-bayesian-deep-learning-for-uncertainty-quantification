@@ -74,7 +74,7 @@ per-topic write-ups:
 - [docs/results_data_efficiency.md](docs/results_data_efficiency.md) — how calibration and the OOD signal change with 100 / 1 000 / 10 000 training images (all ResNet-18).
 - [docs/approach_first_layer_laplace.md](docs/approach_first_layer_laplace.md) — First-Layer Laplace (`conv1`) vs. last layer: where in the network the Bayesian treatment matters *(single-seed, exploratory)*.
 
-Background: [docs/architecture_choice.md](docs/architecture_choice.md), [docs/evaluation_overview.md](docs/evaluation_overview.md).
+Background: [docs/architecture_choice.md](docs/architecture_choice.md)
 
 ---
 
